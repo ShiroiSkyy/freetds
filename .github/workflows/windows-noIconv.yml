@@ -54,11 +54,13 @@ jobs:
         - name: Install & build dependencies
           shell:  bash
           run: |
+            mkdir -p build/lib
             cd build
             cmake -G "NMake Makefiles" \
                     -DCMAKE_BUILD_TYPE=Release \
                     -DENABLE_MSDBLIB=on \
-                    -DWITH_OPENSSL=ON \
+                    -DWITH_OPENSSL=off \
+                    -DWITH_ICONV=off \       # 如果需要禁用 iconv
                     -DDISABLE_ICONV=ON \
                     -DCMAKE_INSTALL_PREFIX:PATH=$PREFIX \
                     ..
