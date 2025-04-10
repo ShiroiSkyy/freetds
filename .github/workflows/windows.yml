@@ -65,9 +65,9 @@ jobs:
                     -DBUILD_EXECUTABLE=off \
                     -DBUILD_TEST=on \
                     -DCMAKE_BUILD_TYPE=Release \
-                    -DWITH_ICONV=on \  # 显式启用iconv
-                    -DICONV_INCLUDE_DIR=../iconv \  # 指定头文件位置
-                    -DICONV_LIBRARY=$(pwd)/../iconv-build/iconv.lib \  # 指定库文件位置
+                    -DWITH_ICONV=on \
+                    -DICONV_INCLUDE_DIR=../iconv \
+                    -DICONV_LIBRARY=$(pwd)/../iconv-build/iconv.lib \
                     ../iconv
             nmake
             cd ..
