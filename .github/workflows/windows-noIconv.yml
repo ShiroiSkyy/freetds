@@ -46,10 +46,10 @@ jobs:
 
         - uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
 
-        - name: Install OpenSSL & perf
-          run: |
-            choco install openssl --version=3.1.1
-            choco install gperf
+        #- name: Install OpenSSL & perf
+        #  run: |
+        #    choco install openssl --version=3.1.1
+        #    choco install gperf
 
         - name: Install & build dependencies
           shell:  bash
