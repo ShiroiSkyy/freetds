@@ -59,16 +59,16 @@ jobs:
           run: |
             mkdir -p build
             cd build
+            
             cmake -G "NMake Makefiles" \
-                  -DCMAKE_BUILD_TYPE=Release \
-                  -DENABLE_MSDBLIB=on \
-                  -DWITH_OPENSSL=ON \
-                  -DWITH_ICONV=off \
-                  -DDISABLE_ICONV=ON \
-                  -DICONV_INCLUDE_DIR=../iconv \
-                  -DICONV_LIBRARY=../iconv-build/iconv.lib \
-                  -DCMAKE_INSTALL_PREFIX="$PREFIX" \
-                  ..
+                -DCMAKE_BUILD_TYPE=Release \
+                -DENABLE_MSDBLIB=on \
+                -DWITH_OPENSSL=ON \
+                -DWITH_ICONV=off \
+                -DDISABLE_ICONV=ON \
+                -DENABLE_SSPI=ON \          # 使用Windows原生认证替代
+                -DCMAKE_INSTALL_PREFIX="$PREFIX" \
+                ..
             nmake
             nmake install
 
