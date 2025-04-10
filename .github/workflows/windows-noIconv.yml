@@ -2,31 +2,22 @@ name: Windows-NoIconv
 
 on:
     push:
-        branches:
-            - '**'
+        branches: [ '**' ]
         paths-ignore:
-            - .github/workflows/macos.yml
-            - .github/workflows/linux.yml
-        tags:
-            - 'v[0-9]+.[0-9]+.[0-9]+'
-            - 'v[0-9]+.[0-9]+.[0-9]+rc[0-9]+'
+            - '.github/workflows/macos.yml'
+            - '.github/workflows/linux.yml'
     pull_request:
-        branches:
-            - '**'
+        branches: [ '**' ]
         paths-ignore:
-            - .github/workflows/macos.yml
-            - .github/workflows/linux.yml
+            - '.github/workflows/macos.yml'
+            - '.github/workflows/linux.yml'
     workflow_dispatch:
 
 permissions: read-all
 
 jobs:
     build:
-        runs-on: ${{ matrix.os }}
-        strategy:
-            fail-fast: false
-            matrix:
-                os: [windows-latest]
+        runs-on: windows-latest
 
         env:
             PREFIX: /freetds
@@ -35,16 +26,15 @@ jobs:
 
         steps:
         - uses: actions/checkout@v4
-          with:
-            fetch-depth: 0
 
         - uses: ilammy/msvc-dev-cmd@v1
-          
+
         - name: Install dependencies
           run: |
-            choco install openssl --version=3.1.1
-            choco install gperf
-            7zip
+            choco install openssl --version=3.1.1 -y
+            choco install gperf -y
+            choco install 7zip.install -y
+            echo "C:\Program Files\7-Zip" >> $env:GITHUB_PATH
 
         - name: Build iconv
           shell: bash
