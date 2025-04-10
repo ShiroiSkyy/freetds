@@ -1,4 +1,4 @@
-name: Windows
+name: Windows-NoIconv
 
 on:
     push:
@@ -54,7 +54,23 @@ jobs:
         - name: Install & build dependencies
           shell:  bash
           run: |
+            curl -sSf ${ICONV_URL}/v${ICONV_VER} -o win_iconv.zip
+            7z x win_iconv.zip
+            mv win-iconv-${ICONV_VER} iconv
+            mkdir iconv-build
+            cd iconv-build
+            cmake -G "NMake Makefiles" \
+                    -DBUILD_STATIC=on \
+                    -DBUILD_SHARED=off \
+                    -DBUILD_EXECUTABLE=off \
+                    -DBUILD_TEST=on \
+                    -DCMAKE_BUILD_TYPE=Release \
+                    ../iconv
+            nmake
+            cd ..
             mkdir -p build/lib
+            cp iconv/iconv.h .
+            cp iconv-build/iconv.lib ./lib
             cd build
             cmake -G "NMake Makefiles" \
                     -DCMAKE_BUILD_TYPE=Release \
