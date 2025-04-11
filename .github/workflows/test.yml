@@ -16,40 +16,41 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Install Visual Studio Build Tools
-      uses: microsoft/setup-msbuild@v1
-      with:
-        vs-version: '17.0'
-        components: Microsoft.VisualStudio.Component.VC.Tools.x86.x64
+    - name: Setup MSVC
+      uses: ilammy/msvc-dev-cmd@v1
 
     - name: Install dependencies
-      shell: bash
+      shell: cmd
       run: |
-        # 基础依赖
         choco install -y openssl --version=3.1.1
         choco install -y gperf
         choco install -y 7zip
         choco install -y make
-
-        # 安装 MSYS2 来获取完整的 GNU 工具链
         choco install -y msys2 --params="/NoUpdate"
-        echo "C:\msys64\usr\bin" >> $GITHUB_PATH
+        echo C:\msys64\usr\bin >> "%GITHUB_PATH%"
 
     - name: Build Iconv
-      shell: bash
+      shell: cmd
       run: |
-        curl -sSf ${ICONV_URL}/v${ICONV_VER} -o win_iconv.zip
+        curl -sSf %ICONV_URL%/v%ICONV_VER% -o win_iconv.zip
         7z x win_iconv.zip
-        mv win-iconv-${ICONV_VER} iconv
+        ren win-iconv-%ICONV_VER% iconv
         mkdir iconv-build
         cd iconv-build
-        cmake -G "NMake Makefiles" \
-              -DBUILD_STATIC=on \
-              -DBUILD_SHARED=off \
-              -DCMAKE_BUILD_TYPE=Release \
+        cmake -G "NMake Makefiles" ^
+              -DBUILD_STATIC=on ^
+              -DBUILD_SHARED=off ^
+              -DCMAKE_BUILD_TYPE=Release ^
               ../iconv
         nmake
         cd ..
+
+    - name: Verify MSVC tools
+      shell: cmd
+      run: |
+        where cl
+        where nmake
+        where cmake
 
     - name: Prepare build environment
       shell: bash
@@ -62,10 +63,10 @@ jobs:
     - name: Configure and Build FreeTDS
       shell: bash
       run: |
-        # 使用 MSYS2 环境中的 autotools
+        # 设置 MSYS2 环境
         export PATH="/c/msys64/usr/bin:$PATH"
         
-        # 生成 configure 脚本（使用 MSYS2 的 autotools）
+        # 生成 configure 脚本
         autoreconf -fvi
 
         # 配置和构建
