@@ -63,11 +63,7 @@ jobs:
     - name: Configure and Build FreeTDS
       shell: bash
       run: |
-        # 设置 MSYS2 环境
-        export PATH="/c/msys64/usr/bin:$PATH"
-        
-        # 生成 configure 脚本
-        autoreconf -fvi
+        chmod +x configure
 
         # 配置和构建
         ./configure \
