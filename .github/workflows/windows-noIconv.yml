@@ -1,21 +1,23 @@
 name: Windows-EnableIconv
 
 on:
-    push:
-        branches:
-            - '**'
-        paths-ignore:
-            - .github/workflows/macos.yml
-            - .github/workflows/linux.yml
-        tags:
-            - 'v[0-9]+.[0-9]+.[0-9]+'
-            - 'v[0-9]+.[0-9]+.[0-9]+rc[0-9]+'
-    pull_request:
-        branches:
-            - '**'
-        paths-ignore:
-            - .github/workflows/macos.yml
-            - .github/workflows/linux.yml
+    #push:
+    #    branches:
+    #        - '**'
+    #    paths-ignore:
+    #        - .github/workflows/macos.yml
+    #        - .github/workflows/linux.yml
+    #        - .github/workflows/windows-noIconv.yml
+    #    tags:
+    #        - 'v[0-9]+.[0-9]+.[0-9]+'
+    #        - 'v[0-9]+.[0-9]+.[0-9]+rc[0-9]+'
+    #pull_request:
+    #    branches:
+    #        - '**'
+    #    paths-ignore:
+    #        - .github/workflows/macos.yml
+    #        - .github/workflows/linux.yml
+    #        - .github/workflows/windows-noIconv.yml
 
     workflow_dispatch:
 
