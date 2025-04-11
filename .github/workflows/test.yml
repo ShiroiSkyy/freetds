@@ -19,13 +19,15 @@ jobs:
     - name: Install dependencies
       shell: bash
       run: |
+        # 基础依赖
         choco install -y openssl --version=3.1.1
         choco install -y gperf
         choco install -y 7zip
         choco install -y make
-        choco install -y automake
-        choco install -y autoconf
-        choco install -y libtool
+
+        # 安装 MSYS2 来获取完整的 GNU 工具链
+        choco install -y msys2 --params="/NoUpdate"
+        echo "C:\msys64\usr\bin" >> $GITHUB_PATH
 
     - name: Build Iconv
       shell: bash
@@ -46,21 +48,21 @@ jobs:
     - name: Prepare build environment
       shell: bash
       run: |
-        # 设置 iconv 路径
         mkdir -p ${{ github.workspace }}/iconv-install
         cp iconv/iconv.h ${{ github.workspace }}/iconv-install/
         cp iconv-build/iconv.lib ${{ github.workspace }}/iconv-install/
-        
-        # 验证文件
         ls -la ${{ github.workspace }}/iconv-install/
 
     - name: Configure and Build FreeTDS
       shell: bash
       run: |
-        # 生成 configure 脚本
-        ./autogen.sh
+        # 使用 MSYS2 环境中的 autotools
+        export PATH="/c/msys64/usr/bin:$PATH"
+        
+        # 生成 configure 脚本（使用 MSYS2 的 autotools）
+        autoreconf -fvi
 
-        # 使用官方推荐的 configure 参数
+        # 配置和构建
         ./configure \
           --prefix=${{ github.workspace }}/freetds_install \
           --enable-msdblib \
@@ -70,7 +72,6 @@ jobs:
           --with-libiconv-prefix=${{ github.workspace }}/iconv-install \
           --disable-threadsafe
 
-        # 构建并安装
         make -j$(nproc)
         make install
 
