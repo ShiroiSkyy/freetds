@@ -1,0 +1,85 @@
+name: Windows Build (Autotools)
+
+on:
+  workflow_dispatch:
+
+permissions: read-all
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    env:
+      ICONV_URL: https://codeload.github.com/win-iconv/win-iconv/zip
+      ICONV_VER: 0.0.8
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies
+      shell: bash
+      run: |
+        choco install -y openssl --version=3.1.1
+        choco install -y gperf
+        choco install -y 7zip
+        choco install -y make
+        choco install -y automake
+        choco install -y autoconf
+        choco install -y libtool
+
+    - name: Build Iconv
+      shell: bash
+      run: |
+        curl -sSf ${ICONV_URL}/v${ICONV_VER} -o win_iconv.zip
+        7z x win_iconv.zip
+        mv win-iconv-${ICONV_VER} iconv
+        mkdir iconv-build
+        cd iconv-build
+        cmake -G "NMake Makefiles" \
+              -DBUILD_STATIC=on \
+              -DBUILD_SHARED=off \
+              -DCMAKE_BUILD_TYPE=Release \
+              ../iconv
+        nmake
+        cd ..
+
+    - name: Prepare build environment
+      shell: bash
+      run: |
+        # 设置 iconv 路径
+        mkdir -p ${{ github.workspace }}/iconv-install
+        cp iconv/iconv.h ${{ github.workspace }}/iconv-install/
+        cp iconv-build/iconv.lib ${{ github.workspace }}/iconv-install/
+        
+        # 验证文件
+        ls -la ${{ github.workspace }}/iconv-install/
+
+    - name: Configure and Build FreeTDS
+      shell: bash
+      run: |
+        # 生成 configure 脚本
+        ./autogen.sh
+
+        # 使用官方推荐的 configure 参数
+        ./configure \
+          --prefix=${{ github.workspace }}/freetds_install \
+          --enable-msdblib \
+          --enable-sybase-compat \
+          --with-tdsver=auto \
+          --with-openssl=no \
+          --with-libiconv-prefix=${{ github.workspace }}/iconv-install \
+          --disable-threadsafe
+
+        # 构建并安装
+        make -j$(nproc)
+        make install
+
+        # 验证构建
+        ${{ github.workspace }}/freetds_install/bin/tsql -C
+
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: windows-freetds-build
+        path: |
+          ${{ github.workspace }}/freetds_install/**/*
