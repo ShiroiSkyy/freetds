@@ -15,19 +15,39 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # 需要完整历史记录来生成 configure 脚本
 
-    - name: Setup MSVC
-      uses: ilammy/msvc-dev-cmd@v1
-
-    - name: Install dependencies
-      shell: cmd
+    - name: Setup build environment
+      shell: powershell
       run: |
+        # 安装基础工具
         choco install -y openssl --version=3.1.1
         choco install -y gperf
         choco install -y 7zip
         choco install -y make
-        choco install -y msys2 --params="/NoUpdate"
-        
+
+        # 安装完整 MSYS2 环境
+        choco install -y msys2 --params="/NoUpdate /InstallDir:C:\msys64"
+        # 设置环境变量
+        $env:PATH = "C:\msys64\usr\bin;C:\msys64\mingw64\bin;$env:PATH"
+        Add-Content $env:GITHUB_PATH "C:\msys64\usr\bin"
+        Add-Content $env:GITHUB_PATH "C:\msys64\mingw64\bin"
+
+    - name: Install autotools
+      shell: bash
+      run: |
+        # 在 MSYS2 中安装 autotools
+        pacman -Sy --noconfirm --needed autoconf automake libtool pkg-config
+        autoreconf --version
+
+    - name: Generate configure script
+      shell: bash
+      run: |
+        # 生成 configure 脚本
+        autoreconf -fvi
+        ls -la configure  # 验证文件已生成
+        chmod +x configure
 
     - name: Build Iconv
       shell: cmd
@@ -45,27 +65,16 @@ jobs:
         nmake
         cd ..
 
-    - name: Verify MSVC tools
-      shell: cmd
+    - name: Prepare iconv
+      shell: powershell
       run: |
-        where cl
-        where nmake
-        where cmake
+        New-Item -ItemType Directory -Force -Path "${{ github.workspace }}/iconv-install"
+        Copy-Item -Path "iconv/iconv.h" -Destination "${{ github.workspace }}/iconv-install/"
+        Copy-Item -Path "iconv-build/iconv.lib" -Destination "${{ github.workspace }}/iconv-install/"
 
-    - name: Prepare build environment
+    - name: Build FreeTDS
       shell: bash
       run: |
-        mkdir -p ${{ github.workspace }}/iconv-install
-        cp iconv/iconv.h ${{ github.workspace }}/iconv-install/
-        cp iconv-build/iconv.lib ${{ github.workspace }}/iconv-install/
-        ls -la ${{ github.workspace }}/iconv-install/
-
-    - name: Configure and Build FreeTDS
-      shell: bash
-      run: |
-        chmod +x configure
-
-        # 配置和构建
         ./configure \
           --prefix=${{ github.workspace }}/freetds_install \
           --enable-msdblib \
@@ -81,9 +90,8 @@ jobs:
         # 验证构建
         ${{ github.workspace }}/freetds_install/bin/tsql -C
 
-    - name: Upload Artifacts
+    - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: windows-freetds-build
-        path: |
-          ${{ github.workspace }}/freetds_install/**/*
+        name: freetds-windows
+        path: ${{ github.workspace }}/freetds_install
