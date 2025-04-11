@@ -101,7 +101,7 @@ jobs:
             nmake install
             
         - name: Verify iconv linkage
-          shell: bash
+          shell: cmd
           run: |
             dumpbin /DEPENDENTS build/src/tds/tds.dll | findstr iconv
             build/src/tds/tsql -C | grep iconv
