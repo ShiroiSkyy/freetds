@@ -636,6 +636,10 @@ tds_iconv(TDSSOCKET * tds, TDSICONV * conv, TDS_ICONV_DIRECTION io,
 	// Debuglog Converting
 	tdsdump_log(TDS_DBG_INFO1, "Converting from %s to %s\n", from->charset.name, to->charset.name);
 
+	tdsdump_log(TDS_DBG_INFO1, "Conversion direction: %s\n", (io == to_server) ? "to_server" : "to_client");
+	tdsdump_log(TDS_DBG_INFO1, "Client charset: %s\n", conv->from.charset.name);
+	tdsdump_log(TDS_DBG_INFO1, "Server charset: %s\n", conv->to.charset.name);
+
 	/* silly case, memcpy */
 	if (conv->flags & TDS_ENCODING_MEMCPY || to->cd == invalid) {
 		size_t len = *inbytesleft < *outbytesleft ? *inbytesleft : *outbytesleft;
