@@ -1,110 +1,96 @@
-name: Windows
+name: Windows-EnableIconv
 
 on:
     push:
-        branches:
-            - '**'
+        branches: [ '**' ]
         paths-ignore:
-            - .github/workflows/macos.yml
-            - .github/workflows/linux.yml
-        tags:
-            - 'v[0-9]+.[0-9]+.[0-9]+'
-            - 'v[0-9]+.[0-9]+.[0-9]+rc[0-9]+'
+            - '.github/workflows/macos.yml'
+            - '.github/workflows/linux.yml'
     pull_request:
-        branches:
-            - '**'
+        branches: [ '**' ]
         paths-ignore:
-            - .github/workflows/macos.yml
-            - .github/workflows/linux.yml
-
+            - '.github/workflows/macos.yml'
+            - '.github/workflows/linux.yml'
     workflow_dispatch:
 
-# Declare default permissions as read only.
 permissions: read-all
 
 jobs:
-
     build:
-
-        runs-on: ${{ matrix.os }}
-
-        strategy:
-            fail-fast: false
-            matrix:
-                os: [windows-latest]
+        runs-on: windows-latest
 
         env:
-            PREFIX: /freetds
+            PREFIX: C:/freetds  # 修改为Windows有效路径
             ICONV_URL: https://codeload.github.com/win-iconv/win-iconv/zip
             ICONV_VER: 0.0.8
 
         steps:
-
-        - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-          with:
-            fetch-depth: 0
-
-        - uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
-
-        - name: Install OpenSSL & perf
+        - uses: actions/checkout@v4
+        
+        - uses: ilammy/msvc-dev-cmd@v1
+          
+        - name: Install dependencies
           run: |
-            choco install openssl --version=3.1.1
-            choco install gperf
+            choco install openssl --version=3.1.1 -y
+            choco install gperf -y
+            choco install 7zip -y
 
-        - name: Install & build dependencies
+        - name: Build iconv
           shell: bash
           run: |
-            # 下载并编译 win-iconv
             curl -sSf ${ICONV_URL}/v${ICONV_VER} -o win_iconv.zip
             7z x win_iconv.zip
             mv win-iconv-${ICONV_VER} iconv
             mkdir iconv-build
             cd iconv-build
-             cmake -G "NMake Makefiles" \
-                    -DBUILD_STATIC=on \
-                    -DBUILD_SHARED=off \
-                    -DBUILD_EXECUTABLE=off \
-                    -DBUILD_TEST=on \
-                    -DCMAKE_BUILD_TYPE=Release \
-                    ../iconv
+            cmake -G "NMake Makefiles" \
+                  -DBUILD_STATIC=on \
+                  -DBUILD_SHARED=off \
+                  -DBUILD_EXECUTABLE=off \
+                  -DBUILD_TEST=on \
+                  -DCMAKE_BUILD_TYPE=Release \
+                  ../iconv
             nmake
             cd ..
-    
-            # 将iconv库和头文件安装到系统位置
-            mkdir -p /usr/local/include
-            mkdir -p /usr/local/lib
-            cp iconv/iconv.h /usr/local/include/
-            cp iconv-build/iconv.lib /usr/local/lib/
 
-            # 构建FreeTDS
+        - name: Build FreeTDS with iconv
+          shell: bash
+          run: |
+            # 创建Windows兼容的安装目录
+            mkdir -p "C:/freetds_deps/include"
+            mkdir -p "C:/freetds_deps/lib"
+            cp iconv/iconv.h "C:/freetds_deps/include/"
+            cp iconv-build/iconv.lib "C:/freetds_deps/lib/"
+            
+            # 构建FreeTDS - 关键修改部分
             mkdir -p build
             cd build
             cmake -G "NMake Makefiles" \
-                    -DCMAKE_BUILD_TYPE=Release \
-                    -DENABLE_MSDBLIB=on \
-                    -DWITH_OPENSSL=ON \
-                    -DWITH_ICONV=on \
-                    -DICONV_INCLUDE_DIR=/usr/local/include \
-                    -DICONV_LIBRARY=/usr/local/lib/iconv.lib \
-                    -DCMAKE_INSTALL_PREFIX=$PREFIX \
-                    ..
+                  -DCMAKE_BUILD_TYPE=Release \
+                  -DENABLE_MSDBLIB=on \
+                  -DWITH_OPENSSL=ON \
+                  -DHAVE_ICONV=1 \
+                  -DICONV_INCLUDE_DIR="C:/freetds_deps/include" \
+                  -DICONV_LIBRARY="C:/freetds_deps/lib/iconv.lib" \
+                  -DCMAKE_INSTALL_PREFIX="$PREFIX" \
+                  ..
+            
+            # 验证CMake配置
+            cat CMakeCache.txt | grep ICONV
+            
             nmake
+            nmake install
 
+        - name: Verify iconv linkage
+          shell: bash
+          run: |
+            dumpbin /DEPENDENTS build/src/tds/tds.dll | findstr iconv
+            build/src/tds/tsql -C | grep iconv
 
-        # 工作流运行结束后，在Git仓库的 Actions → 对应运行记录 → Artifacts 中会生成一个压缩包（如 windows-build.zip），供手动下载。
-        - name: Upload Build Artifacts
+        - name: Upload Artifacts
           uses: actions/upload-artifact@v4
           with:
             name: windows-build
             path: |
-              /freetds/**/*
+              ${{ env.PREFIX }}/**/*
               ./build/**/*
-
-        # 当推送 vX.Y.Z 标签时，自动将构建文件附加到GitHub Release中。
-        - name: Create Release
-          if: startsWith(github.ref, 'refs/tags/')
-          uses: actions/create-release@v1
-          with:
-            tag_name: ${{ github.ref }}
-            release_name: Release ${{ github.ref }}
-            artifacts: ./build/**/*  # 或指定/freetds下的文件
