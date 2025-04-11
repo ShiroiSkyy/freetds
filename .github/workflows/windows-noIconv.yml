@@ -1,23 +1,37 @@
-name: Windows-NoIconv
+name: Windows
 
 on:
     push:
-        branches: [ '**' ]
+        branches:
+            - '**'
         paths-ignore:
-            - '.github/workflows/macos.yml'
-            - '.github/workflows/linux.yml'
+            - .github/workflows/macos.yml
+            - .github/workflows/linux.yml
+        tags:
+            - 'v[0-9]+.[0-9]+.[0-9]+'
+            - 'v[0-9]+.[0-9]+.[0-9]+rc[0-9]+'
     pull_request:
-        branches: [ '**' ]
+        branches:
+            - '**'
         paths-ignore:
-            - '.github/workflows/macos.yml'
-            - '.github/workflows/linux.yml'
+            - .github/workflows/macos.yml
+            - .github/workflows/linux.yml
+
     workflow_dispatch:
 
+# Declare default permissions as read only.
 permissions: read-all
 
 jobs:
+
     build:
-        runs-on: windows-latest
+
+        runs-on: ${{ matrix.os }}
+
+        strategy:
+            fail-fast: false
+            matrix:
+                os: [windows-latest]
 
         env:
             PREFIX: /freetds
@@ -25,19 +39,20 @@ jobs:
             ICONV_VER: 0.0.8
 
         steps:
-        - uses: actions/checkout@v4
 
-        - uses: ilammy/msvc-dev-cmd@v1
+        - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+          with:
+            fetch-depth: 0
 
-        - name: Install dependencies
+        - uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
+
+        - name: Install OpenSSL & perf
           run: |
-            choco install openssl --version=3.1.1 -y
-            choco install gperf -y
-            choco install 7zip.install -y
-            echo "C:\Program Files\7-Zip" >> $env:GITHUB_PATH
+            choco install openssl --version=3.1.1
+            choco install gperf
 
-        - name: Build iconv
-          shell: bash
+        - name: Install & build dependencies
+          shell:  bash
           run: |
             curl -sSf ${ICONV_URL}/v${ICONV_VER} -o win_iconv.zip
             7z x win_iconv.zip
@@ -45,37 +60,46 @@ jobs:
             mkdir iconv-build
             cd iconv-build
             cmake -G "NMake Makefiles" \
-                  -DBUILD_STATIC=on \
-                  -DBUILD_SHARED=off \
-                  -DBUILD_EXECUTABLE=off \
-                  -DBUILD_TEST=on \
-                  -DCMAKE_BUILD_TYPE=Release \
-                  ../iconv
+                    -DBUILD_STATIC=on \
+                    -DBUILD_SHARED=off \
+                    -DBUILD_EXECUTABLE=off \
+                    -DBUILD_TEST=on \
+                    -DCMAKE_BUILD_TYPE=Release \
+                    -DWITH_ICONV=on \
+                    -DICONV_INCLUDE_DIR=../iconv \
+                    -DICONV_LIBRARY=$(pwd)/../iconv-build/iconv.lib \
+                    ../iconv
             nmake
             cd ..
-
-        - name: Build FreeTDS
-          shell: bash
-          run: |
-            mkdir -p build
+            mkdir -p build/lib
+            cp iconv/iconv.h .
+            cp iconv-build/iconv.lib ./lib
             cd build
-            
             cmake -G "NMake Makefiles" \
-                -DCMAKE_BUILD_TYPE=Release \
-                -DENABLE_MSDBLIB=on \
-                -DWITH_OPENSSL=ON \
-                -DWITH_ICONV=off \
-                -DDISABLE_ICONV=ON \
-                -DENABLE_SSPI=ON \          # 使用Windows原生认证替代
-                -DCMAKE_INSTALL_PREFIX="$PREFIX" \
-                ..
+                    -DCMAKE_BUILD_TYPE=Release \
+                    -DENABLE_MSDBLIB=on \
+                    -DWITH_OPENSSL=ON \
+                    -DWITH_ICONV=on \
+                    -DICONV_INCLUDE_DIR=../iconv \
+                    -DICONV_LIBRARY=$(pwd)/../iconv-build/iconv.lib \
+                    -DCMAKE_INSTALL_PREFIX:PATH=$PREFIX \
+                    ..
             nmake
-            nmake install
 
-        - name: Upload Artifacts
+        # 工作流运行结束后，在Git仓库的 Actions → 对应运行记录 → Artifacts 中会生成一个压缩包（如 windows-build.zip），供手动下载。
+        - name: Upload Build Artifacts
           uses: actions/upload-artifact@v4
           with:
             name: windows-build
             path: |
-              ${{ env.PREFIX }}/**/*
+              /freetds/**/*
               ./build/**/*
+
+        # 当推送 vX.Y.Z 标签时，自动将构建文件附加到GitHub Release中。
+        - name: Create Release
+          if: startsWith(github.ref, 'refs/tags/')
+          uses: actions/create-release@v1
+          with:
+            tag_name: ${{ github.ref }}
+            release_name: Release ${{ github.ref }}
+            artifacts: ./build/**/*  # 或指定/freetds下的文件
