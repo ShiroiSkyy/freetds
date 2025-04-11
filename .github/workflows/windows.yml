@@ -75,10 +75,10 @@ jobs:
           shell:  bash
           run: |
             mkdir -p build/lib
-            cp iconv/iconv.h .
-            cp iconv-build/iconv.lib ./lib
-            ls -la ./iconv.h
-            ls -la ./lib/iconv.lib
+            cp iconv/iconv.h build/
+            cp iconv-build/iconv.lib build/lib/
+            ls -la build/iconv.h
+            ls -la build/lib/iconv.lib
             cd build
             cmake -G "NMake Makefiles" \
                     -DCMAKE_BUILD_TYPE=Release \
@@ -86,8 +86,8 @@ jobs:
                     -DENABLE_SYBASE_COMPAT=on \
                     -DWITH_OPENSSL=off \
                     -DWITH_ICONV=on \
-                    -DICONV_INCLUDE_DIR=${{ github.workspace }} \
-                    -DICONV_LIBRARY=${{ github.workspace }}/lib/iconv.lib \
+                    -DICONV_INCLUDE_DIR=${{ github.workspace }}/build \
+                    -DICONV_LIBRARY=${{ github.workspace }}/build/lib/iconv.lib \
                     -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/freetds_install" \
                     ..
             nmake
