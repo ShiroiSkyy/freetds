@@ -593,6 +593,7 @@ size_t
 tds_iconv(TDSSOCKET * tds, TDSICONV * conv, TDS_ICONV_DIRECTION io,
 	  const char **inbuf, size_t * inbytesleft, char **outbuf, size_t * outbytesleft)
 {
+	tdsdump_log(TDS_DBG_INFO1, "Converting from %s to %s\n", from->charset.name, to->charset.name);
 	static const iconv_t invalid = (iconv_t) -1;
 	TDSICONVDIR *from = NULL;
 	TDSICONVDIR *to = NULL;
