@@ -107,7 +107,7 @@ jobs:
           with:
             name: windows-build
             path: |
-              /freetds/**/*
+              C:/Program Files/Git/freetds/**/*
               ./build/**/*
 
         # 当推送 vX.Y.Z 标签时，自动将构建文件附加到GitHub Release中。
