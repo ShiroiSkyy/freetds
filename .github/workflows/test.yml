@@ -16,7 +16,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
       with:
-        fetch-depth: 0  # 需要完整历史记录来生成 configure 脚本
+        fetch-depth: 0
 
     - name: Setup build environment
       shell: powershell
@@ -27,9 +27,8 @@ jobs:
         choco install -y 7zip
         choco install -y make
 
-        # 安装完整 MSYS2 环境
+        # 安装 MSYS2 并配置
         choco install -y msys2 --params="/NoUpdate /InstallDir:C:\msys64"
-        # 设置环境变量
         $env:PATH = "C:\msys64\usr\bin;C:\msys64\mingw64\bin;$env:PATH"
         Add-Content $env:GITHUB_PATH "C:\msys64\usr\bin"
         Add-Content $env:GITHUB_PATH "C:\msys64\mingw64\bin"
@@ -37,17 +36,29 @@ jobs:
     - name: Install autotools
       shell: bash
       run: |
-        # 在 MSYS2 中安装 autotools
-        pacman -Sy --noconfirm --needed autoconf automake libtool pkg-config
-        autoreconf --version
+        # 安装特定版本的 autotools
+        pacman -Sy --noconfirm --needed autoconf2.69 automake1.16 libtool
+        aclocal-1.16 --version
+        autoreconf-2.69 --version
+
+    - name: Patch configure.ac
+      shell: bash
+      run: |
+        # 修复重复的 AC_CONFIG_FILES
+        sed -i.bak '/AC_CONFIG_FILES/d' configure.ac
+        echo "AC_CONFIG_FILES([Makefile])" >> configure.ac
+        cat configure.ac | grep -A2 "AC_CONFIG_FILES"
 
     - name: Generate configure script
       shell: bash
       run: |
-        # 生成 configure 脚本
-        autoreconf -fvi
-        ls -la configure  # 验证文件已生成
-        chmod +x configure
+        # 按顺序运行 autotools 命令
+        libtoolize --force
+        aclocal-1.16 -I m4
+        autoheader
+        automake-1.16 --add-missing --copy
+        autoconf-2.69
+        ls -la configure
 
     - name: Build Iconv
       shell: cmd
@@ -65,13 +76,6 @@ jobs:
         nmake
         cd ..
 
-    - name: Prepare iconv
-      shell: powershell
-      run: |
-        New-Item -ItemType Directory -Force -Path "${{ github.workspace }}/iconv-install"
-        Copy-Item -Path "iconv/iconv.h" -Destination "${{ github.workspace }}/iconv-install/"
-        Copy-Item -Path "iconv-build/iconv.lib" -Destination "${{ github.workspace }}/iconv-install/"
-
     - name: Build FreeTDS
       shell: bash
       run: |
@@ -87,7 +91,9 @@ jobs:
         make -j$(nproc)
         make install
 
-        # 验证构建
+    - name: Verify build
+      shell: bash
+      run: |
         ${{ github.workspace }}/freetds_install/bin/tsql -C
 
     - name: Upload artifacts
