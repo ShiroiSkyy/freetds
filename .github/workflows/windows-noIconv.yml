@@ -52,39 +52,44 @@ jobs:
             choco install gperf
 
         - name: Install & build dependencies
-          shell:  bash
+          shell: bash
           run: |
+            # 下载并编译 win-iconv
             curl -sSf ${ICONV_URL}/v${ICONV_VER} -o win_iconv.zip
             7z x win_iconv.zip
             mv win-iconv-${ICONV_VER} iconv
             mkdir iconv-build
             cd iconv-build
-            cmake -G "NMake Makefiles" \
+             cmake -G "NMake Makefiles" \
                     -DBUILD_STATIC=on \
                     -DBUILD_SHARED=off \
                     -DBUILD_EXECUTABLE=off \
                     -DBUILD_TEST=on \
                     -DCMAKE_BUILD_TYPE=Release \
-                    -DWITH_ICONV=on \
-                    -DICONV_INCLUDE_DIR=../iconv \
-                    -DICONV_LIBRARY=$(pwd)/../iconv-build/iconv.lib \
                     ../iconv
             nmake
             cd ..
-            mkdir -p build/lib
-            cp iconv/iconv.h .
-            cp iconv-build/iconv.lib ./lib
+    
+            # 将iconv库和头文件安装到系统位置
+            mkdir -p /usr/local/include
+            mkdir -p /usr/local/lib
+            cp iconv/iconv.h /usr/local/include/
+            cp iconv-build/iconv.lib /usr/local/lib/
+
+            # 构建FreeTDS
+            mkdir -p build
             cd build
             cmake -G "NMake Makefiles" \
                     -DCMAKE_BUILD_TYPE=Release \
                     -DENABLE_MSDBLIB=on \
                     -DWITH_OPENSSL=ON \
                     -DWITH_ICONV=on \
-                    -DICONV_INCLUDE_DIR=../iconv \
-                    -DICONV_LIBRARY=$(pwd)/../iconv-build/iconv.lib \
-                    -DCMAKE_INSTALL_PREFIX:PATH=$PREFIX \
+                    -DICONV_INCLUDE_DIR=/usr/local/include \
+                    -DICONV_LIBRARY=/usr/local/lib/iconv.lib \
+                    -DCMAKE_INSTALL_PREFIX=$PREFIX \
                     ..
             nmake
+
 
         # 工作流运行结束后，在Git仓库的 Actions → 对应运行记录 → Artifacts 中会生成一个压缩包（如 windows-build.zip），供手动下载。
         - name: Upload Build Artifacts
