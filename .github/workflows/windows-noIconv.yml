@@ -100,11 +100,6 @@ jobs:
             nmake
             nmake install
             
-        - name: Verify iconv linkage
-          shell: cmd
-          run: |
-            dumpbin /DEPENDENTS build/src/tds/tds.dll | findstr iconv
-            build/src/tds/tsql -C | grep iconv
 
         # 工作流运行结束后，在Git仓库的 Actions → 对应运行记录 → Artifacts 中会生成一个压缩包（如 windows-build.zip），供手动下载。
         - name: Upload Build Artifacts
