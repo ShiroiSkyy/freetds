@@ -27,7 +27,7 @@ jobs:
         choco install -y 7zip
         choco install -y make
         choco install -y msys2 --params="/NoUpdate"
-        echo C:\msys64\usr\bin >> "%GITHUB_PATH%"
+        
 
     - name: Build Iconv
       shell: cmd
