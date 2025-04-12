@@ -53,7 +53,7 @@ jobs:
             choco install openssl --version=3.1.1
             choco install gperf
 
-        - name: Build Iconv
+        - name: build Iconv
           shell:  bash
           run: |
             curl -sSf ${ICONV_URL}/v${ICONV_VER} -o win_iconv.zip
@@ -65,36 +65,35 @@ jobs:
                     -DBUILD_STATIC=on \
                     -DBUILD_SHARED=off \
                     -DBUILD_EXECUTABLE=off \
-                    -DBUILD_TEST=on \
+                    -DBUILD_TEST=off \
                     -DCMAKE_BUILD_TYPE=Release \
                     ../iconv
             nmake
             cd ..
+            
+            mkdir -p build/lib
+            cp iconv/iconv.h .
+            cp iconv-build/iconv.lib ./lib
 
-        - name: Build FreeTDS
+            ls -la ./iconv.h
+            ls -la ./lib/iconv.lib
+
+        - name: Echo ENV:$PREFIX
           shell:  bash
           run: |
-            mkdir -p build/iconv/lib
+            echo "完整PREFIX路径：$PREFIX"
             
-            cp iconv/iconv.h build/iconv/
-            cp iconv/iconv.h include/freetds/
-            cp iconv-build/iconv.lib build/iconv/lib/
-            
-            ls -la build/iconv/iconv.h
-            ls -la include/freetds/iconv.h
-            ls -la build/iconv/lib/iconv.lib
-            
+        - name: Install & build FreeTDS
+          shell:  bash
+          run: |
             cd build
             cmake -G "NMake Makefiles" \
-                    -DENABLE_ODBC=on \
-                    -DENABLE_ODBC_WIDE=on \
-                    -DENABLE_MSDBLIB=off \
-                    -DENABLE_SSPI=on \
-                    -DENABLE_THREADSAFE=ON \
-                    -DWITH_OPENSSL=on \
-                    -DBUILD_SHARED_LIBS=OFF \
                     -DCMAKE_BUILD_TYPE=Release \
-                    -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/freetds_install" \
+                    -DENABLE_MSDBLIB=off \
+                    -DENABLE_ODBC_WIDE=on \
+                    -DBUILD_SHARED_LIBS=OFF \
+                    -DWITH_OPENSSL=ON \
+                    -DCMAKE_INSTALL_PREFIX:PATH=$PREFIX \
                     ..
             nmake
             nmake install
@@ -104,13 +103,13 @@ jobs:
           with:
             name: windows-build
             path: |
-              ${{ github.workspace }}/freetds_install/**/*
+              $PREFIX
 
-        - name: Create Release
-          if: startsWith(github.ref, 'refs/tags/')
-          uses: actions/create-release@v1
-          with:
-            tag_name: ${{ github.ref }}
-            release_name: Release ${{ github.ref }}
-            artifacts: ${{ github.workspace }}/freetds_install/**/*  # 或指定/freetds下的文件
+        #- name: Create Release
+        #  if: startsWith(github.ref, 'refs/tags/')
+        #  uses: actions/create-release@v1
+        #  with:
+        #    tag_name: ${{ github.ref }}
+        #    release_name: Release ${{ github.ref }}
+        #    artifacts: ${{ github.workspace }}/freetds_install/**/*  # 或指定/freetds下的文件
 
