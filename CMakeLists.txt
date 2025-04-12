@@ -449,8 +449,8 @@ config_write("
 endif(WIN32)
 
 set(lib_BASE ${lib_RT} ${CMAKE_THREAD_LIBS_INIT})
-if(EXISTS "${{ github.workspace }}/build/iconv/lib/iconv.lib")
-	set(lib_BASE ${lib_BASE} ${CMAKE_THREAD_LIBS_INIT} "${{ github.workspace }}/build/iconv/lib/iconv.lib")
+if(EXISTS "D:/a/freetds/freetds/build/iconv/lib/iconv.lib")
+	set(lib_BASE ${lib_BASE} ${CMAKE_THREAD_LIBS_INIT} "D:/a/freetds/freetds/build/iconv/lib/iconv.lib")
 	config_write("#define HAVE_ICONV 1\n\n")
 	config_write("#define ICONV_CONST \n\n")
 endif()
