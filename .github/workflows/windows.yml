@@ -84,11 +84,14 @@ jobs:
             
             cd build
             cmake -G "NMake Makefiles" \
-                    -DCMAKE_BUILD_TYPE=Release \
-                    -DENABLE_MSDBLIB=off \
+                    -DENABLE_ODBC=on \
                     -DENABLE_ODBC_WIDE=on \
+                    -DENABLE_MSDBLIB=off \
                     -DENABLE_SSPI=on \
-                    -DWITH_OPENSSL=off \
+                    -DENABLE_THREADSAFE=ON \
+                    -DWITH_OPENSSL=on \
+                    -DBUILD_SHARED_LIBS=OFF \
+                    -DCMAKE_BUILD_TYPE=Release \
                     -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/freetds_install" \
                     ..
             nmake
