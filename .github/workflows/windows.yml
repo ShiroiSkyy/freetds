@@ -51,7 +51,7 @@ jobs:
         - name: Install OpenSSL & perf
           run: |
             #choco install openssl --version=3.1.1
-            #choco install gperf
+            choco install gperf
 
         - name: download Iconv
           shell:  bash
