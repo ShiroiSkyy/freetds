@@ -1,4 +1,4 @@
-name: Windows Build (Stable)
+name: Windows Native Build
 
 on:
   workflow_dispatch:
@@ -10,18 +10,12 @@ jobs:
     runs-on: windows-latest
 
     env:
+      FREETDS_VERSION: 1.4.12
       ICONV_URL: https://codeload.github.com/win-iconv/win-iconv/zip
       ICONV_VER: 0.0.8
-      FREETDS_VERSION: 1.4.12  # 使用稳定版本替代 git 版本
 
     steps:
-    - name: Download stable release
-      shell: bash
-      run: |
-        curl -LO https://www.freetds.org/files/stable/freetds-${{ env.FREETDS_VERSION }}.tar.gz
-        tar -xzf freetds-${{ env.FREETDS_VERSION }}.tar.gz
-        mv freetds-${{ env.FREETDS_VERSION }} freetds
-        cd freetds
+    - uses: actions/checkout@v4
 
     - name: Setup MSVC
       uses: ilammy/msvc-dev-cmd@v1
@@ -32,6 +26,15 @@ jobs:
         choco install -y openssl --version=3.1.1
         choco install -y gperf
         choco install -y 7zip
+        choco install -y perl # 需要 perl 来运行 configure 脚本
+
+    - name: Download and extract
+      shell: cmd
+      run: |
+        curl -LO https://www.freetds.org/files/stable/freetds-%FREETDS_VERSION%.tar.gz
+        7z x freetds-%FREETDS_VERSION%.tar.gz
+        7z x freetds-%FREETDS_VERSION%.tar
+        ren freetds-%FREETDS_VERSION% freetds
 
     - name: Build Iconv
       shell: cmd
@@ -49,36 +52,37 @@ jobs:
         nmake
         cd ..
 
-    - name: Prepare iconv
-      shell: powershell
-      run: |
-        New-Item -ItemType Directory -Force -Path "${{ github.workspace }}/iconv-install"
-        Copy-Item -Path "iconv/iconv.h" -Destination "${{ github.workspace }}/iconv-install/"
-        Copy-Item -Path "iconv-build/iconv.lib" -Destination "${{ github.workspace }}/iconv-install/"
-
-    - name: Build FreeTDS
+    - name: Configure FreeTDS
       shell: cmd
+      working-directory: ./freetds
       run: |
-        cd freetds
-        configure.bat ^
-          --prefix=${{ github.workspace }}\freetds_install ^
+        mkdir %CD%\..\iconv-install
+        copy ..\iconv\iconv.h %CD%\..\iconv-install\
+        copy ..\iconv-build\iconv.lib %CD%\..\iconv-install\
+        
+        perl configure ^
+          --prefix=%CD%\..\freetds_install ^
           --enable-msdblib ^
           --enable-sybase-compat ^
           --with-tdsver=7.4 ^
           --with-openssl=no ^
-          --with-libiconv-prefix=${{ github.workspace }}\iconv-install ^
+          --with-libiconv-prefix=%CD%\..\iconv-install ^
           --disable-threadsafe
 
-        nmake
-        nmake install
+    - name: Build FreeTDS
+      shell: cmd
+      working-directory: ./freetds
+      run: |
+        nmake /f Makefile
+        nmake /f Makefile install
 
     - name: Verify build
       shell: cmd
       run: |
-        ${{ github.workspace }}\freetds_install\bin\tsql -C
+        %CD%\freetds_install\bin\tsql -C
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
         name: freetds-windows
-        path: ${{ github.workspace }}\freetds_install
+        path: freetds_install
