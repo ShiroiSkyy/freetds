@@ -12,6 +12,7 @@ jobs:
     env:
       ICONV_URL: https://codeload.github.com/win-iconv/win-iconv/zip
       ICONV_VER: 0.0.8
+      FREETDS_VERSION: 1.4.12  # 使用稳定版本替代 git 版本
 
     steps:
     - name: Download stable release
