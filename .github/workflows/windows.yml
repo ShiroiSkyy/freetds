@@ -101,15 +101,10 @@ jobs:
             echo "iconv-build目录："
             dir ./iconv-build/
             
-            #cp ./iconv/iconv.h .
-            #cp ./iconv-build/iconv.lib ./lib
-
-            # 将库文件复制到 CMake 预期的搜索路径
-            mkdir -p "${CMAKE_SOURCE_DIR}/iconv/lib"
-            cp ./iconv/iconv.h "${CMAKE_SOURCE_DIR}/iconv/include/"
-            cp ./iconv-build/iconv.lib "${CMAKE_SOURCE_DIR}/iconv/lib/"
+            cp ./iconv/iconv.h ./iconv/include
+            cp ./iconv/iconv.h ./include
+            cp ./iconv-build/iconv.lib ./iconv/lib/
             
-            ls -la "${CMAKE_SOURCE_DIR}/iconv/lib/iconv.lib"
             ls -la ./iconv.h
             ls -la ./lib/iconv.lib
             
