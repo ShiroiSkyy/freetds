@@ -53,7 +53,7 @@ jobs:
             choco install openssl --version=3.1.1
             choco install gperf
 
-        - name: build Iconv
+        - name: download Iconv
           shell:  bash
           run: |
             curl -sSf ${ICONV_URL}/v${ICONV_VER} -o win_iconv.zip
@@ -61,6 +61,17 @@ jobs:
             mv win-iconv-${ICONV_VER} iconv
             mkdir iconv-build
             cd iconv-build
+
+        - name: dir Iconv
+          shell:  bash
+          run: |
+              dir ../
+              dir ./
+              dir ../iconv
+              
+        - name: build Iconv
+          shell:  bash
+          run: |
             cmake -G "NMake Makefiles" \
                     -DBUILD_STATIC=on \
                     -DBUILD_SHARED=off \
@@ -72,7 +83,9 @@ jobs:
             cd ..
             
             mkdir -p build/lib
+            mkdir -p ./lib
             cp iconv/iconv.h .
+            cp iconv/iconv.lib ./lib
             cp iconv-build/iconv.lib ./lib
 
             ls -la ./iconv.h
