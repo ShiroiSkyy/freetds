@@ -50,7 +50,7 @@ jobs:
 
         - name: Install OpenSSL & perf
           run: |
-            choco install openssl --version=3.1.1
+            #choco install openssl --version=3.1.1
             choco install gperf
 
         - name: Build Iconv
@@ -85,12 +85,10 @@ jobs:
             cd build
             cmake -G "NMake Makefiles" \
                     -DCMAKE_BUILD_TYPE=Release \
-                    -DENABLE_MSDBLIB=on \
-                    -DENABLE_SYBASE_COMPAT=on \
+                    -DENABLE_MSDBLIB=off \
+                    -DENABLE_ODBC_WIDE=on \
+                    -DENABLE_SSPI=on \
                     -DWITH_OPENSSL=off \
-                    -DWITH_ICONV=on \
-                    -DICONV_INCLUDE_DIR=${{ github.workspace }}/build \
-                    -DICONV_LIBRARY=${{ github.workspace }}/build/lib/iconv.lib \
                     -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/freetds_install" \
                     ..
             nmake
