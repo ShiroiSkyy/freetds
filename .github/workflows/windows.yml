@@ -91,7 +91,8 @@ jobs:
             cd ..
             
             mkdir -p build/lib
-            mkdir -p ./lib
+            mkdir -p ./iconv/lib
+            mkdir -p ./iconv/include
 
 
             echo "本级目录：./"
@@ -101,12 +102,13 @@ jobs:
             echo "iconv-build目录："
             dir ./iconv-build/
             
-            cp ./iconv/iconv.h ./iconv/include
             cp ./iconv/iconv.h ./include
+            cp ./iconv/iconv.h ./iconv/include
             cp ./iconv-build/iconv.lib ./iconv/lib/
             
-            ls -la ./iconv.h
-            ls -la ./lib/iconv.lib
+            ls -la ./include/iconv.h
+            ls -la ./iconv/include/iconv.h
+            ls -la ./iconv/lib/iconv.lib
             
         - name: Install & build FreeTDS
           shell:  bash
