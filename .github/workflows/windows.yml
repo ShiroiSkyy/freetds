@@ -81,7 +81,7 @@ jobs:
             cp iconv-build/iconv.lib build/iconv/lib/
             
             ls -la build/iconv/iconv.h
-            cp -la include/freetds/iconv.h
+            ls -la include/freetds/iconv.h
             ls -la build/iconv/lib/iconv.lib
             
             cd build
