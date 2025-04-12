@@ -74,11 +74,14 @@ jobs:
         - name: Build FreeTDS
           shell:  bash
           run: |
-            mkdir -p build/lib
-            cp iconv/iconv.h build/
-            cp iconv-build/iconv.lib build/lib/
-            ls -la build/iconv.h
-            ls -la build/lib/iconv.lib
+            mkdir -p build/iconv/lib
+            
+            cp iconv/iconv.h build/iconv/
+            cp iconv-build/iconv.lib build/iconv/lib/
+            
+            ls -la build/iconv/iconv.h
+            ls -la build/iconv/lib/iconv.lib
+            
             cd build
             cmake -G "NMake Makefiles" \
                     -DCMAKE_BUILD_TYPE=Release \
@@ -91,6 +94,7 @@ jobs:
                     -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/freetds_install" \
                     ..
             nmake
+            nmake install
 
         - name: Upload Build Artifacts
           uses: actions/upload-artifact@v4
