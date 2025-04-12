@@ -36,7 +36,7 @@ jobs:
                 os: [windows-latest]
 
         env:
-            PREFIX: /freetds
+            PREFIX: C:/freetds
             ICONV_URL: https://codeload.github.com/win-iconv/win-iconv/zip
             ICONV_VER: 0.0.8
 
@@ -64,13 +64,13 @@ jobs:
         - name: dir Iconv
           shell:  bash
           run: |
-              cd iconv-build
               echo "上级目录：../"
               dir ../
               echo "本级目录：./"
               dir ./
               echo "iconv目录"
-              dir ../iconv
+              dir ./iconv
+              
         - name: Echo ENV:$PREFIX
           shell:  bash
           run: |
@@ -92,6 +92,15 @@ jobs:
             
             mkdir -p build/lib
             mkdir -p ./lib
+
+
+            echo "本级目录：./"
+            dir ./
+            echo "iconv目录"
+            dir ./iconv/
+            echo "iconv-build目录"
+            dir ./iconv-build/
+            
             cp ./iconv/iconv.h .
             cp ./iconv-build/iconv.lib ./lib
 
