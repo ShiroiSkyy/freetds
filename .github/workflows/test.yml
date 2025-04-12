@@ -27,37 +27,37 @@ jobs:
         choco install -y 7zip
         choco install -y make
 
-        # 安装 MSYS2 并配置
+        # 安装完整 MSYS2 环境
         choco install -y msys2 --params="/NoUpdate /InstallDir:C:\msys64"
+        # 刷新 PATH
         $env:PATH = "C:\msys64\usr\bin;C:\msys64\mingw64\bin;$env:PATH"
         Add-Content $env:GITHUB_PATH "C:\msys64\usr\bin"
         Add-Content $env:GITHUB_PATH "C:\msys64\mingw64\bin"
 
-    - name: Install autotools
+    - name: Install complete autotools
       shell: bash
       run: |
-        # 安装特定版本的 autotools
-        pacman -Sy --noconfirm --needed autoconf2.69 automake1.16 libtool
-        aclocal-1.16 --version
-        autoreconf-2.69 --version
-
-    - name: Patch configure.ac
-      shell: bash
-      run: |
-        # 修复重复的 AC_CONFIG_FILES
-        sed -i.bak '/AC_CONFIG_FILES/d' configure.ac
-        echo "AC_CONFIG_FILES([Makefile])" >> configure.ac
-        cat configure.ac | grep -A2 "AC_CONFIG_FILES"
+        # 安装完整 autotools 工具链
+        pacman -Sy --noconfirm --needed autoconf automake libtool pkg-config make
+        pacman -Sy --noconfirm --needed autoconf-archive automake-wrapper
+        # 验证安装
+        autom4te --version
+        aclocal --version
+        autoreconf --version
 
     - name: Generate configure script
       shell: bash
       run: |
-        # 按顺序运行 autotools 命令
-        libtoolize --force
-        aclocal-1.16 -I m4
+        # 清理旧文件
+        rm -rf autom4te.cache
+        rm -f configure aclocal.m4
+        
+        # 分步生成 configure 脚本
+        libtoolize --force --copy
+        aclocal -I m4
         autoheader
-        automake-1.16 --add-missing --copy
-        autoconf-2.69
+        automake --add-missing --copy
+        autoconf
         ls -la configure
 
     - name: Build Iconv
