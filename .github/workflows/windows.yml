@@ -128,7 +128,7 @@ jobs:
             echo "输出目录DIR：build/include"
             dir ./include/
             echo "输出目录DIR：build/include/config.h"
-            grep -E "HAVE_ICONV|ICONV_CONST" build/include/config.h
+            grep -E "HAVE_ICONV|ICONV_CONST" ./include/config.h
 
         - name: Upload Build Artifacts
           uses: actions/upload-artifact@v4
