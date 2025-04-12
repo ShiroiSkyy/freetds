@@ -50,8 +50,8 @@ jobs:
 
         - name: Install OpenSSL & perf
           run: |
-            choco install openssl --version=3.1.1
-            choco install gperf
+            #choco install openssl --version=3.1.1
+            #choco install gperf
 
         - name: download Iconv
           shell:  bash
@@ -122,7 +122,7 @@ jobs:
                     -DENABLE_MSDBLIB=off \
                     -DENABLE_ODBC_WIDE=on \
                     -DBUILD_SHARED_LIBS=OFF \
-                    -DWITH_OPENSSL=ON \
+                    -DWITH_OPENSSL=off \
                     -DCMAKE_INSTALL_PREFIX:PATH=$PREFIX \
                     ..
             nmake
