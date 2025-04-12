@@ -1,9 +1,9 @@
 name: Windows
 
 on:
-    #push:
-    #    branches:
-    #        - '**'
+    push:
+        branches:
+            - '**'
     #    paths-ignore:
     #        - .github/workflows/macos.yml
     #        - .github/workflows/linux.yml
