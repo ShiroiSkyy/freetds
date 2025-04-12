@@ -93,7 +93,6 @@ jobs:
             mkdir -p build/lib
             mkdir -p ./lib
             cp ./iconv/iconv.h .
-            cp ./iconv/iconv.lib ./lib
             cp ./iconv-build/iconv.lib ./lib
 
             ls -la ./iconv.h
