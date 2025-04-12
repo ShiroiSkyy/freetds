@@ -123,6 +123,10 @@ jobs:
             nmake install
             echo "输出目录DIR：build"
             dir ./
+            echo "输出目录DIR：build/lib"
+            dir ./lib/
+            echo "输出目录DIR：build/include"
+            dir ./include/
             echo "输出目录DIR：build/include/config.h"
             grep -E "HAVE_ICONV|ICONV_CONST" build/include/config.h
 
