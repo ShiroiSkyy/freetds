@@ -1,4 +1,4 @@
-name: Windows Build (Autotools)
+name: Windows Build (Stable)
 
 on:
   workflow_dispatch:
@@ -14,51 +14,23 @@ jobs:
       ICONV_VER: 0.0.8
 
     steps:
-    - uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
+    - name: Download stable release
+      shell: bash
+      run: |
+        curl -LO https://www.freetds.org/files/stable/freetds-${{ env.FREETDS_VERSION }}.tar.gz
+        tar -xzf freetds-${{ env.FREETDS_VERSION }}.tar.gz
+        mv freetds-${{ env.FREETDS_VERSION }} freetds
+        cd freetds
 
-    - name: Setup build environment
+    - name: Setup MSVC
+      uses: ilammy/msvc-dev-cmd@v1
+
+    - name: Install dependencies
       shell: powershell
       run: |
-        # 安装基础工具
         choco install -y openssl --version=3.1.1
         choco install -y gperf
         choco install -y 7zip
-        choco install -y make
-
-        # 安装完整 MSYS2 环境
-        choco install -y msys2 --params="/NoUpdate /InstallDir:C:\msys64"
-        # 刷新 PATH
-        $env:PATH = "C:\msys64\usr\bin;C:\msys64\mingw64\bin;$env:PATH"
-        Add-Content $env:GITHUB_PATH "C:\msys64\usr\bin"
-        Add-Content $env:GITHUB_PATH "C:\msys64\mingw64\bin"
-
-    - name: Install complete autotools
-      shell: bash
-      run: |
-        # 安装完整 autotools 工具链
-        pacman -Sy --noconfirm --needed autoconf automake libtool pkg-config make
-        pacman -Sy --noconfirm --needed autoconf-archive automake-wrapper
-        # 验证安装
-        autom4te --version
-        aclocal --version
-        autoreconf --version
-
-    - name: Generate configure script
-      shell: bash
-      run: |
-        # 清理旧文件
-        rm -rf autom4te.cache
-        rm -f configure aclocal.m4
-        
-        # 分步生成 configure 脚本
-        libtoolize --force --copy
-        aclocal -I m4
-        autoheader
-        automake --add-missing --copy
-        autoconf
-        ls -la configure
 
     - name: Build Iconv
       shell: cmd
@@ -76,28 +48,36 @@ jobs:
         nmake
         cd ..
 
-    - name: Build FreeTDS
-      shell: bash
+    - name: Prepare iconv
+      shell: powershell
       run: |
-        ./configure \
-          --prefix=${{ github.workspace }}/freetds_install \
-          --enable-msdblib \
-          --enable-sybase-compat \
-          --with-tdsver=auto \
-          --with-openssl=no \
-          --with-libiconv-prefix=${{ github.workspace }}/iconv-install \
+        New-Item -ItemType Directory -Force -Path "${{ github.workspace }}/iconv-install"
+        Copy-Item -Path "iconv/iconv.h" -Destination "${{ github.workspace }}/iconv-install/"
+        Copy-Item -Path "iconv-build/iconv.lib" -Destination "${{ github.workspace }}/iconv-install/"
+
+    - name: Build FreeTDS
+      shell: cmd
+      run: |
+        cd freetds
+        configure.bat ^
+          --prefix=${{ github.workspace }}\freetds_install ^
+          --enable-msdblib ^
+          --enable-sybase-compat ^
+          --with-tdsver=7.4 ^
+          --with-openssl=no ^
+          --with-libiconv-prefix=${{ github.workspace }}\iconv-install ^
           --disable-threadsafe
 
-        make -j$(nproc)
-        make install
+        nmake
+        nmake install
 
     - name: Verify build
-      shell: bash
+      shell: cmd
       run: |
-        ${{ github.workspace }}/freetds_install/bin/tsql -C
+        ${{ github.workspace }}\freetds_install\bin\tsql -C
 
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
         name: freetds-windows
-        path: ${{ github.workspace }}/freetds_install
+        path: ${{ github.workspace }}\freetds_install
