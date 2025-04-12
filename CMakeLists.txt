@@ -449,8 +449,8 @@ config_write("
 endif(WIN32)
 
 set(lib_BASE ${lib_RT} ${CMAKE_THREAD_LIBS_INIT})
-if(EXISTS "D:/a/freetds/freetds/build/iconv/lib/iconv.lib")
-	set(lib_BASE ${lib_BASE} ${CMAKE_THREAD_LIBS_INIT} "D:/a/freetds/freetds/build/iconv/lib/iconv.lib")
+if(EXISTS "${CMAKE_BINARY_DIR}/iconv/lib/iconv.lib")
+	set(lib_BASE ${lib_BASE} ${CMAKE_THREAD_LIBS_INIT} "${CMAKE_BINARY_DIR}/iconv/lib/iconv.lib")
 	config_write("#define HAVE_ICONV 1\n\n")
 	config_write("#define ICONV_CONST \n\n")
 endif()
@@ -468,7 +468,6 @@ elseif(GNUTLS_FOUND)
 	set(lib_NETWORK ${lib_NETWORK} ${lib_GNUTLS})
 endif(OPENSSL_FOUND)
 
-#include_directories(${CMAKE_BINARY_DIR}/include include iconv/include)
 include_directories(${CMAKE_BINARY_DIR}/include include ${CMAKE_BINARY_DIR}/iconv/include)
 
 add_subdirectory(src/utils)
