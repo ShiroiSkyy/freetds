@@ -69,6 +69,7 @@ static void tds_iconv_info_close(TDSICONV * char_conv);
 static const char *iconv_names[TDS_VECTOR_SIZE(canonic_charsets)];
 static bool iconv_initialized = false;
 static const char *ucs2name;
+static bool charset_locked = 0;
 
 enum
 { POS_ISO1, POS_UTF8, POS_UCS2LE, POS_UCS2BE };
@@ -427,7 +428,10 @@ tds_iconv_open(TDSCONNECTION * conn, const char *charset, int use_utf16)
 		conn->char_convs[client2server_chardata]->from.charset = canonic_charsets[canonic_charset];
 		conn->char_convs[client2server_chardata]->to.charset = canonic_charsets[canonic_charset];
 	}
-
+	
+	tds_srv_charset_changed(conn, "CP936");
+	conn->charset_locked = 1;
+	
 	tdsdump_log(TDS_DBG_FUNC, "tds_iconv_open: done\n");
 	return TDS_SUCCESS;
 }
@@ -558,36 +562,36 @@ tds_iconv_err(TDSSOCKET *tds, int err)
 		tdserror(tds_get_ctx(tds), tds, err, 0);
 }
 
-/** 
- * Wrapper around iconv(3).  Same parameters, with slightly different behavior.
- * \param tds state information for the socket and the TDS protocol
- * \param io Enumerated value indicating whether the data are being sent to or received from the server. 
- * \param conv information about the encodings involved, including the iconv(3) conversion descriptors. 
- * \param inbuf address of pointer to the input buffer of data to be converted.  
- * \param inbytesleft address of count of bytes in \a inbuf.
- * \param outbuf address of pointer to the output buffer.  
- * \param outbytesleft address of count of bytes in \a outbuf.
- * \retval number of irreversible conversions performed.  -1 on error, see iconv(3) documentation for 
- * a description of the possible values of \e errno.  
- * \remarks Unlike iconv(3), none of the arguments can be nor point to NULL.  Like iconv(3), all pointers will 
- *  	be updated.  Success is signified by a nonnegative return code and \a *inbytesleft == 0.  
- * 	If the conversion descriptor in \a iconv is -1 or NULL, \a inbuf is copied to \a outbuf, 
- *	and all parameters updated accordingly. 
- * 
- * 	If a character in \a inbuf cannot be converted because no such cbaracter exists in the
- * 	\a outbuf character set, we emit messages similar to the ones Sybase emits when it fails such a conversion. 
- * 	The message varies depending on the direction of the data.  
- * 	On a read error, we emit Msg 2403, Severity 16 (EX_INFO):
- * 		"WARNING! Some character(s) could not be converted into client's character set. 
- *			Unconverted bytes were changed to question marks ('?')."
- * 	On a write error we emit Msg 2402, Severity 16 (EX_USER):
- *		"Error converting client characters into server's character set. Some character(s) could not be converted."
- *  	  and return an error code.  Client libraries relying on this routine should reflect an error back to the application.  
+/**
+* A wrapper around iconv(3). It has the same parameters but slightly different behavior.
+* \param tds State information for the socket and the TDS protocol.
+* \param io An enumerated value indicating whether the data is being sent to or received from the server.
+* \param conv Information about the encodings involved, including the iconv(3) conversion descriptors.
+* \param inbuf Address of a pointer to the input buffer of data to be converted.
+* \param inbytesleft Address of the count of bytes in \a inbuf.
+* \param outbuf Address of a pointer to the output buffer.
+* \param outbytesleft Address of the count of bytes in \a outbuf.
+* \retval The number of irreversible conversions performed. Returns -1 on error; see the iconv(3) documentation for a description of possible \e errno values.
+* \remarks Unlike iconv(3), none of the arguments can be or point to NULL. Like iconv(3), all pointers will be updated. Success is indicated by a nonnegative return code and \a *inbytesleft == 0.
+*   If the conversion descriptor in \a iconv is -1 or NULL, \a inbuf is copied to \a outbuf, and all parameters are updated accordingly.
+*   If a character in \a inbuf cannot be converted because no such character exists in the \a outbuf character set, we emit messages similar to those Sybase emits when such a conversion fails.
+*   The message varies depending on the direction of the data.
+*   On a read error, we emit Msg 2403, Severity 16 (EX_INFO):
+*
+*   If a character in \a inbuf cannot be converted because no such character exists in the \a outbuf character set, we emit messages similar to those Sybase emits when such a conversion fails.
+*   The message varies depending on the direction of the data.
+*   On a read error, we emit Msg 2403, Severity 16 (EX_INFO):
+*   The message varies depending on the direction of the data.
+WARNING! Some character(s) could not be converted into client's character set.
+Unconverted bytes were changed to question marks ('?').
+On a write error we emit Msg 2402, Severity 16 (EX_USER):
+Error converting client characters into server's character set. Some character(s) could not be converted.
+and return an error code. Client libraries relying on this routine should reflect an error back to the application.
  *
- * \todo Check for variable multibyte non-UTF-8 input character set.  
- * \todo Use more robust error message generation.  
- * \todo For reads, cope with \a outbuf encodings that don't have the equivalent of an ASCII '?'.  
- * \todo Support alternative to '?' for the replacement character.  
+TODO: Check for variable multibyte non-UTF-8 input character set.
+TODO: Use more robust error message generation.
+TODO: For reads, cope with outbuf encodings that don't have the equivalent of an ASCII '?'.
+TODO: Support alternative to '?' for the replacement character.
  */
 size_t
 tds_iconv(TDSSOCKET * tds, TDSICONV * conv, TDS_ICONV_DIRECTION io,
@@ -633,9 +637,9 @@ tds_iconv(TDSSOCKET * tds, TDSICONV * conv, TDS_ICONV_DIRECTION io,
 		assert(io == to_server || io == to_client);
 		break;
 	}
+	
 	// Debuglog Converting
 	tdsdump_log(TDS_DBG_INFO1, "Converting from %s to %s\n", from->charset.name, to->charset.name);
-
 	tdsdump_log(TDS_DBG_INFO1, "Conversion direction: %s\n", (io == to_server) ? "to_server" : "to_client");
 	tdsdump_log(TDS_DBG_INFO1, "Client charset: %s\n", conv->from.charset.name);
 	tdsdump_log(TDS_DBG_INFO1, "Server charset: %s\n", conv->to.charset.name);
@@ -848,6 +852,10 @@ tds_srv_charset_changed_num(TDSCONNECTION * conn, int canonic_charset_num)
 void
 tds_srv_charset_changed(TDSCONNECTION * conn, const char *charset)
 {
+	if (charset_locked) {
+        	tdsdump_log(TDS_DBG_FUNC, "Character set is locked, ignore change request\n");
+        	return;
+    	}
 	int n = tds_canonical_charset(charset);
 
 	/* ignore request to change to unknown charset */
