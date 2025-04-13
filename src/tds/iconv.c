@@ -69,7 +69,7 @@ static void tds_iconv_info_close(TDSICONV * char_conv);
 static const char *iconv_names[TDS_VECTOR_SIZE(canonic_charsets)];
 static bool iconv_initialized = false;
 static const char *ucs2name;
-static bool charset_locked = 0;
+static bool charset_locked = false;
 
 enum
 { POS_ISO1, POS_UTF8, POS_UCS2LE, POS_UCS2BE };
@@ -430,7 +430,7 @@ tds_iconv_open(TDSCONNECTION * conn, const char *charset, int use_utf16)
 	}
 	
 	tds_srv_charset_changed(conn, "CP936");
-	conn->charset_locked = 1;
+	charset_locked = true;
 	
 	tdsdump_log(TDS_DBG_FUNC, "tds_iconv_open: done\n");
 	return TDS_SUCCESS;
