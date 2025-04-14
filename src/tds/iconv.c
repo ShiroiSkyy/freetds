@@ -430,7 +430,7 @@ tds_iconv_open(TDSCONNECTION * conn, const char *charset, int use_utf16)
 	}
 	
 	/* Forcing the use of character sets */
-	tds_srv_charset_changed(conn, "UTF-8");
+	tds_srv_charset_changed(conn, "GB18030");
 	charset_locked = true;
 	
 	tdsdump_log(TDS_DBG_FUNC, "tds_iconv_open: done\n");
