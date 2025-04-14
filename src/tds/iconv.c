@@ -429,7 +429,8 @@ tds_iconv_open(TDSCONNECTION * conn, const char *charset, int use_utf16)
 		conn->char_convs[client2server_chardata]->to.charset = canonic_charsets[canonic_charset];
 	}
 	
-	tds_srv_charset_changed(conn, "CP936");
+	/* Forcing the use of character sets */
+	tds_srv_charset_changed(conn, "CP850");
 	charset_locked = true;
 	
 	tdsdump_log(TDS_DBG_FUNC, "tds_iconv_open: done\n");
