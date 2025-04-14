@@ -54,6 +54,7 @@ static int tds_iconv_info_init(TDSICONV * char_conv, int client_canonic, int ser
 static bool tds_iconv_init(void);
 static void _iconv_close(iconv_t * cd);
 static void tds_iconv_info_close(TDSICONV * char_conv);
+static int g_disable_iconv = 1;
 
 
 /**
@@ -598,6 +599,13 @@ size_t
 tds_iconv(TDSSOCKET * tds, TDSICONV * conv, TDS_ICONV_DIRECTION io,
 	  const char **inbuf, size_t * inbytesleft, char **outbuf, size_t * outbytesleft)
 {
+	if (g_disable_iconv) {
+        size_t copied = (*inbytesleft < *outbytesleft) ? *inbytesleft : *outbytesleft;
+        memcpy(*outbuf, *inbuf, copied);
+        /* Update pointer position */
+        return 0; 
+    }
+
 	static const iconv_t invalid = (iconv_t) -1;
 	TDSICONVDIR *from = NULL;
 	TDSICONVDIR *to = NULL;
