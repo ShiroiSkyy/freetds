@@ -614,8 +614,16 @@ tds_iconv(TDSSOCKET * tds, TDSICONV * conv, TDS_ICONV_DIRECTION io,
 	/* cast away const-ness */
 	TDS_ERRNO_MESSAGE_FLAGS *suppress = (TDS_ERRNO_MESSAGE_FLAGS*) &conv->suppress;
 
-	return raw_copy(inbuf, inbytesleft, outbuf, outbytesleft);
-
+	size_t len = (*inbytesleft < *outbytesleft) ? *inbytesleft : *outbytesleft;
+        if (len > 0) {
+            memcpy(*outbuf, *inbuf, len);
+            *inbuf += len;
+            *outbuf += len;
+            *inbytesleft -= len;
+            *outbytesleft -= len;
+        }
+        return 0;
+		
 	assert(inbuf && inbytesleft && outbuf && outbytesleft);
 
 	/* if empty there's nothing to return.
