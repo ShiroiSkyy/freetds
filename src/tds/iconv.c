@@ -430,7 +430,7 @@ tds_iconv_open(TDSCONNECTION * conn, const char *charset, int use_utf16)
 	}
 	
 	/* Forcing the use of character sets */
-	tds_srv_charset_changed(conn, "GB18030");
+	tds_srv_charset_changed(conn, "CP850");
 	charset_locked = true;
 	
 	tdsdump_log(TDS_DBG_FUNC, "tds_iconv_open: done\n");
@@ -854,9 +854,10 @@ void
 tds_srv_charset_changed(TDSCONNECTION * conn, const char *charset)
 {
 	if (charset_locked) {
-        	tdsdump_log(TDS_DBG_FUNC, "Character set is locked, ignore change request\n");
-        	return;
-    	}
+        tdsdump_log(TDS_DBG_FUNC, "Character set is locked, ignore change request\n");
+        return;
+    }
+	
 	int n = tds_canonical_charset(charset);
 
 	/* ignore request to change to unknown charset */
