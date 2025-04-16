@@ -853,10 +853,10 @@ tds_srv_charset_changed_num(TDSCONNECTION * conn, int canonic_charset_num)
 void
 tds_srv_charset_changed(TDSCONNECTION * conn, const char *charset)
 {
-	if (charset_locked) {
+	/*if (charset_locked) {
         tdsdump_log(TDS_DBG_FUNC, "Character set is locked, ignore change request\n");
         return;
-    }
+    }*/
 
 	int n = tds_canonical_charset(charset);
 
