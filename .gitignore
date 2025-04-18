@@ -43,3 +43,4 @@ missing
 include/iconv.h
 .vscode/tasks.json
 win_iconv.zip
+freetds_install/
