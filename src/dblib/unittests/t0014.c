@@ -5,12 +5,14 @@
 
 #include "common.h"
 
+#include <freetds/bool.h>
+
 #define BLOB_BLOCK_SIZE 4096
 
-char *testargs[] = { "", FREETDS_SRCDIR "/data.bin", "t0014.out" };
+static char *testargs[] = { "", FREETDS_SRCDIR "/data.bin", "t0014.out" };
 
 static int
-test(int argc, char **argv, int over4k)
+test(int argc, char **argv, bool over4k)
 {
 	const int rows_to_add = 3;
 	LOGINREC *login;
@@ -76,6 +78,7 @@ test(int argc, char **argv, int over4k)
 	result = fseek(fp, 0, SEEK_SET);
 
 	blob = (char *) malloc(isiz);
+	assert(blob);
 	result = fread((void *) blob, isiz, 1, fp);
 	assert(result == 1);
 	fclose(fp);
@@ -120,12 +123,18 @@ test(int argc, char **argv, int over4k)
 			textPtr = dbtxptr(dbproc, 1);
 			timeStamp = dbtxtimestamp(dbproc, 1);
 
+#ifdef DBTDS_7_2
 			if (!textPtr && !timeStamp && dbtds(dbproc) >= DBTDS_7_2) {
 				printf("Protocol 7.2+ detected, test not supported\n");
 				free(blob);
 				dbexit();
 				exit(0);
 			}
+#endif
+
+			/* leave NULL on first row */
+			if (i == 0)
+				continue;
 
 			/*
 			 * Use #ifdef if you want to test dbmoretext mode (needed for 16-bit apps)
@@ -175,7 +184,7 @@ test(int argc, char **argv, int over4k)
 	}
 
 	for (i = 0; i < rows_to_add; i++) {
-	char expected[1024];
+		char expected[1024];
 
 		sprintf(expected, "row %03d", i);
 
@@ -209,20 +218,27 @@ test(int argc, char **argv, int over4k)
 		numread = 0;
 		rblob = NULL;
 		while ((result = dbreadtext(blobproc, rbuf, BLOB_BLOCK_SIZE)) != NO_MORE_ROWS) {
+			assert(result >= 0);
 			if (result != 0) {	/* this indicates not end of row */
 				rblob = (char*) realloc(rblob, result + numread);
+				assert(rblob);
 				memcpy((void *) (rblob + numread), (void *) rbuf, result);
 				numread += result;
 			}
 		}
 
-		if (rblob == NULL) {
-			fputs("No blob data received", stderr);
+		/* first row is NULL */
+		if (rblob != NULL && i == 0) {
+			fputs("Blob data received\n", stderr);
+			return 7;
+		}
+		if (rblob == NULL && i > 0) {
+			fputs("No blob data received\n", stderr);
 			return 7;
 		}
 
-		if (i == 0) {
-			printf("Saving first blob data row to file: %s\n", argv[2]);
+		if (i == 1) {
+			printf("Saving send blob data row to file: %s\n", argv[2]);
 			if ((fp = fopen(argv[2], "wb")) == NULL) {
 				free(blob);
 				free(rblob);
@@ -260,11 +276,9 @@ test(int argc, char **argv, int over4k)
 
 TEST_MAIN()
 {
-	int res;
-
-	res = test(argc, argv, 0);
+	int res = test(argc, argv, false);
 	if (!res)
-		res = test(argc, argv, 1);
+		res = test(argc, argv, true);
 	if (res)
 		return res;
 

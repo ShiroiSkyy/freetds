@@ -2719,17 +2719,14 @@ dbbind(DBPROCESS * dbproc, int column, int vartype, DBINT varlen, BYTE * varaddr
  * \brief set name and location of the \c interfaces file FreeTDS should use to look up a servername.
  * 
  * Does not affect lookups or location of \c freetds.conf.  
- * \param filename name of \c interfaces 
+ * \param filename name of \c interfaces. It can be NULL (reset to default)
  * \sa dbopen()
  */
 void
 dbsetifile(char *filename)
 {
 	tdsdump_log(TDS_DBG_FUNC, "dbsetifile(%s)\n", filename? filename : "0x00");
-	if (filename == NULL) { 
-		dbperror(NULL, SYBENULP, 0); 
-		return;
-	}
+
 	tds_set_interfaces_file_loc(filename);
 }
 
@@ -6755,7 +6752,7 @@ dbreadtext(DBPROCESS * dbproc, void *buf, DBINT bufsize)
 	}
 
 	/* find the number of bytes to return */
-	bytes_avail = curcol->column_cur_size - curcol->column_textpos;
+	bytes_avail = TDS_MAX(curcol->column_cur_size, 0) - curcol->column_textpos;
 	cpbytes = bytes_avail > bufsize ? bufsize : bytes_avail;
 	memcpy(buf, &((TDSBLOB *) curcol->column_data)->textvalue[curcol->column_textpos], cpbytes);
 	curcol->column_textpos += cpbytes;
