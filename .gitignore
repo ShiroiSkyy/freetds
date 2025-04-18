@@ -3,6 +3,8 @@ cscope.files
 cscope.out
 Makefile.in
 build/
+iconv/
+iconv-build/
 config.log
 config.cache
 config.status
@@ -38,3 +40,6 @@ test-driver
 *.gcno
 *.gcda
 missing
+include/iconv.h
+.vscode/tasks.json
+win_iconv.zip
