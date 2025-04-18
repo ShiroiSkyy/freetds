@@ -117,7 +117,7 @@ jobs:
             cmake -G "NMake Makefiles" \
                     -DCMAKE_BUILD_TYPE=Release \
                     -DENABLE_MSDBLIB=off \
-                    -DENABLE_ODBC_WIDE=off \
+                    -DENABLE_ODBC_WIDE=on \
                     -DBUILD_SHARED_LIBS=OFF \
                     -DWITH_OPENSSL=off \
                     -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/freetds_install" \
