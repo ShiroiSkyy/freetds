@@ -685,8 +685,8 @@ reroute:
 	} else {
 		tds->out_flag = TDS_LOGIN;
 		erc = tds_send_login(tds, login);
-		if (TDS_SUCCEED(erc))
-			tds_srv_charset_changed(tds->conn, "CP936");
+		/*if (TDS_SUCCEED(erc))
+			tds_srv_charset_changed(tds->conn, "CP936");*/
 	}
 	if (TDS_FAILED(erc) || TDS_FAILED(tds_process_login_tokens(tds))) {
 		tdsdump_log(TDS_DBG_ERROR, "login packet %s\n", TDS_SUCCEED(erc)? "accepted":"rejected");

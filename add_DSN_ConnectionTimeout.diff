@@ -1,0 +1,37 @@
+diff --git a/include/freetds/odbc.h b/include/freetds/odbc.h
+index 1e42b50f7..44b9a728f 100644
+--- a/include/freetds/odbc.h
++++ b/include/freetds/odbc.h
+@@ -528,7 +528,8 @@ bool get_login_info(HWND hwndParent, TDSLOGIN * login);
+        ODBC_PARAM(ApplicationIntent) \
+        ODBC_PARAM(Timeout) \
+        ODBC_PARAM(Encrypt) \
+-       ODBC_PARAM(HostNameInCertificate)
++       ODBC_PARAM(HostNameInCertificate) \
++       ODBC_PARAM(ConnectionTimeout)
+ 
+ #define ODBC_PARAM(p) ODBC_PARAM_##p,
+ enum {
+diff --git a/src/odbc/connectparams.c b/src/odbc/connectparams.c
+index 1810fba51..55c5013a1 100644
+--- a/src/odbc/connectparams.c
++++ b/src/odbc/connectparams.c
+@@ -289,6 +289,9 @@ odbc_get_dsn_info(TDS_ERRS *errs, const char *DSN, TDSLOGIN * login)
+        if (myGetPrivateProfileString(DSN, odbc_param_Timeout, tmp) > 0)
+                tds_parse_conf_section(TDS_STR_TIMEOUT, tmp, login);
+ 
++       if (myGetPrivateProfileString(DSN, odbc_param_ConnectionTimeout, tmp) > 0)
++               tds_parse_conf_section(TDS_STR_CONNTIMEOUT, tmp, login);
++
+        if (myGetPrivateProfileString(DSN, odbc_param_HostNameInCertificate, tmp) > 0
+            && (tmp[0] && strcmp(tmp, "null") != 0)) {
+                if (!tds_dstr_copy(&login->certificate_host_name, tmp)) {
+@@ -518,6 +521,8 @@ odbc_parse_connect_string(TDS_ERRS *errs, const char *connect_string, const char
+                        tdsdump_log(TDS_DBG_INFO1, "Application Intent %s\n", readonly_intent);
+                } else if (CHK_PARAM(Timeout)) {
+                        tds_parse_conf_section(TDS_STR_TIMEOUT, tds_dstr_cstr(&value), login);
++               } else if (CHK_PARAM(ConnectionTimeout)) {
++                       tds_parse_conf_section(TDS_STR_CONNTIMEOUT, tds_dstr_cstr(&value), login);
+                } else if (CHK_PARAM(HostNameInCertificate)) {
+                        dest_s = &login->certificate_host_name;
+                }
