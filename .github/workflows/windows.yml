@@ -116,12 +116,15 @@ jobs:
             cd build
             cmake -G "NMake Makefiles" \
                     -DCMAKE_BUILD_TYPE=Release \
-                    -DENABLE_MSDBLIB=off \
-                    -DENABLE_ODBC_WIDE=on \
+                    -DENABLE_MSDBLIB=OFF \
+                    -DENABLE_ODBC_WIDE=OFF \
                     -DBUILD_SHARED_LIBS=OFF \
-                    -DWITH_OPENSSL=off \
+                    -DWITH_OPENSSL=OFF \
                     -DCMAKE_INSTALL_PREFIX="${{ github.workspace }}/freetds_install" \
                     ..
+            echo "检查 config.h 是否存在HAVE_ICONV|ICONV_CONST"
+            grep -E "HAVE_ICONV|ICONV_CONST" ./include/config.h
+
             nmake
             nmake install
             echo "输出目录DIR：build"
@@ -130,8 +133,6 @@ jobs:
             dir ./lib/
             echo "输出目录DIR：build/include"
             dir ./include/
-            echo "输出目录DIR：build/include/config.h"
-            grep -E "HAVE_ICONV|ICONV_CONST" ./include/config.h
 
         - name: Upload Build Artifacts
           uses: actions/upload-artifact@v4
