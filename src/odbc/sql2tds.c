@@ -111,6 +111,28 @@ convert_datetime2server(int bindtype, const void *src, TDS_DATETIMEALL * dta)
 	return sizeof(TDS_DATETIMEALL);
 }
 
+TDS_INT
+convert_numeric2server(struct _sql_errors *errs, const void *src, TDS_NUMERIC *num)
+{
+	const SQL_NUMERIC_STRUCT *sql_num;
+	size_t i;
+
+	sql_num = (const SQL_NUMERIC_STRUCT *) src;
+	num->precision = sql_num->precision;
+	num->scale = sql_num->scale;
+	num->array[0] = sql_num->sign ^ 1;
+	/* test precision so client do not crash our library */
+	if (num->precision <= 0 || num->precision > 38 || num->scale > num->precision) {
+		odbc_convert_err_set(errs, TDS_CONVERT_FAIL);
+		return TDS_CONVERT_FAIL;
+	}
+	i = tds_numeric_bytes_per_prec[num->precision];
+	memset(num->array + 1, 0, sizeof(num->array) - 1);
+	memcpy(num->array + 1, sql_num->val, i - 1);
+	tds_swap_bytes(num->array + 1, i - 1);
+	return sizeof(TDS_NUMERIC);
+}
+
 static char*
 odbc_wstr2str(TDS_STMT * stmt, const char *src, int* len)
 {
@@ -264,12 +286,9 @@ odbc_sql2tds(TDS_STMT * stmt, const struct _drecord *drec_ixd, const struct _dre
 	char *src, *converted_src;
 	unsigned char *dest;
 	int len;
-	TDS_DATETIMEALL dta;
-	TDS_NUMERIC num;
-	SQL_NUMERIC_STRUCT *sql_num;
+	ODBC_CONVERT_BUF convert_buf;
 	SQLLEN sql_len;
 	bool need_data = false;
-	int i;
 
 	/* TODO handle bindings of char like "{d '2002-11-12'}" */
 	tdsdump_log(TDS_DBG_INFO2, "type=%d\n", drec_ixd->sql_desc_concise_type);
@@ -490,25 +509,14 @@ odbc_sql2tds(TDS_STMT * stmt, const struct _drecord *drec_ixd, const struct _dre
 	/* convert special parameters (not libTDS compatible) */
 	switch (src_type) {
 	case SYBMSDATETIME2:
-		convert_datetime2server(sql_src_type, src, &dta);
-		src = (char *) &dta;
+		convert_datetime2server(sql_src_type, src, &convert_buf.dta);
+		src = (char *) &convert_buf.dta;
 		break;
 	case SYBDECIMAL:
 	case SYBNUMERIC:
-		sql_num = (SQL_NUMERIC_STRUCT *) src;
-		num.precision = sql_num->precision;
-		num.scale = sql_num->scale;
-		num.array[0] = sql_num->sign ^ 1;
-		/* test precision so client do not crash our library */
-		if (num.precision <= 0 || num.precision > 38 || num.scale > num.precision)
-			/* TODO add proper error */
+		if (convert_numeric2server(&stmt->errs, src, &convert_buf.num) <= 0)
 			return SQL_ERROR;
-		i = tds_numeric_bytes_per_prec[num.precision];
-		memcpy(num.array + 1, sql_num->val, i - 1);
-		tds_swap_bytes(num.array + 1, i - 1);
-		if (i < sizeof(num.array))
-			memset(num.array + i, 0, sizeof(num.array) - i);
-		src = (char *) &num;
+		src = (char *) &convert_buf.num;
 		break;
 		/* TODO intervals */
 	default:

@@ -288,6 +288,7 @@ struct _hdbc
 	TDSSOCKET *tds_socket;
 	DSTR dsn;
 	DSTR oldpwd;
+	DSTR db_filename;
 #ifdef ENABLE_ODBC_WIDE
 	int original_charset_num;
 	TDSICONV *mb_conv;
@@ -499,36 +500,37 @@ bool get_login_info(HWND hwndParent, TDSLOGIN * login);
 #endif
 
 #define ODBC_PARAM_LIST \
-	ODBC_PARAM(Servername) \
-	ODBC_PARAM(Server) \
-	ODBC_PARAM(DSN) \
-	ODBC_PARAM(UID) \
-	ODBC_PARAM(PWD) \
 	ODBC_PARAM(Address) \
-	ODBC_PARAM(Port) \
-	ODBC_PARAM(TDS_Version) \
-	ODBC_PARAM(Language) \
-	ODBC_PARAM(Database) \
-	ODBC_PARAM(TextSize) \
-	ODBC_PARAM(PacketSize) \
+	ODBC_PARAM(APP) \
+	ODBC_PARAM(ApplicationIntent) \
+	ODBC_PARAM(AttachDbFilename) \
 	ODBC_PARAM(ClientCharset) \
+	ODBC_PARAM(ConnectionTimeout) \
+	ODBC_PARAM(Database) \
+	ODBC_PARAM(DebugFlags) \
+	ODBC_PARAM(DSN) \
 	ODBC_PARAM(DumpFile) \
 	ODBC_PARAM(DumpFileAppend) \
-	ODBC_PARAM(DebugFlags) \
-	ODBC_PARAM(Encryption) \
-	ODBC_PARAM(Trusted_Connection) \
-	ODBC_PARAM(APP) \
-	ODBC_PARAM(WSID) \
-	ODBC_PARAM(UseNTLMv2) \
-	ODBC_PARAM(MARS_Connection) \
-	ODBC_PARAM(REALM) \
-	ODBC_PARAM(ServerSPN) \
-	ODBC_PARAM(AttachDbFilename) \
-	ODBC_PARAM(ApplicationIntent) \
-	ODBC_PARAM(Timeout) \
 	ODBC_PARAM(Encrypt) \
+	ODBC_PARAM(Encryption) \
 	ODBC_PARAM(HostNameInCertificate) \
-	ODBC_PARAM(ConnectionTimeout)
+	ODBC_PARAM(Language) \
+	ODBC_PARAM(MARS_Connection) \
+	ODBC_PARAM(PacketSize) \
+	ODBC_PARAM(Port) \
+	ODBC_PARAM(PWD) \
+	ODBC_PARAM(REALM) \
+	ODBC_PARAM(Server) \
+	ODBC_PARAM(ServerCertificate) \
+	ODBC_PARAM(Servername) \
+	ODBC_PARAM(ServerSPN) \
+	ODBC_PARAM(TDS_Version) \
+	ODBC_PARAM(TextSize) \
+	ODBC_PARAM(Timeout) \
+	ODBC_PARAM(Trusted_Connection) \
+	ODBC_PARAM(UID) \
+	ODBC_PARAM(UseNTLMv2) \
+	ODBC_PARAM(WSID)
 
 #define ODBC_PARAM(p) ODBC_PARAM_##p,
 enum {
@@ -708,9 +710,15 @@ const char *odbc_skip_rpc_name(const char *s);
 /*
  * sql2tds.c
  */
+typedef union {
+	TDS_DATETIMEALL dta;
+	TDS_NUMERIC num;
+} ODBC_CONVERT_BUF;
+
 SQLRETURN odbc_sql2tds(TDS_STMT * stmt, const struct _drecord *drec_ixd, const struct _drecord *drec_axd, TDSCOLUMN *curcol,
 		       bool compute_row, const TDS_DESC* axd, SQLSETPOSIROW n_row);
 TDS_INT convert_datetime2server(int bindtype, const void *src, TDS_DATETIMEALL * dta);
+TDS_INT convert_numeric2server(struct _sql_errors *errs, const void *src, TDS_NUMERIC *num);
 
 /*
  * bcp.c

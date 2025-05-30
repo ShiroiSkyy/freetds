@@ -8,13 +8,13 @@
 
 #include <freetds/replacements.h>
 
-static CS_RETCODE
+static void
 do_bind(CS_BLKDESC * blkdesc, int colnum, CS_INT host_format, CS_INT host_type, CS_INT host_maxlen,
 	void        *var_addr,
 	CS_INT      *var_len_addr,
 	CS_SMALLINT *var_ind_addr );
 static void do_one_bind(CS_BLKDESC * blkdesc, int col, const char *name);
-static FILE *open_test_file(void);
+static FILE *open_test_file(const char *filename);
 typedef enum
 {
 	PART_END,
@@ -196,32 +196,22 @@ do_one_bind(CS_BLKDESC *blkdesc, int col, const char *name)
 	exit(1);
 }
 
-static CS_RETCODE
+static void
 do_bind(CS_BLKDESC * blkdesc, int colnum, CS_INT host_format, CS_INT host_type, CS_INT host_maxlen,
 	void        *var_addr,
 	CS_INT      *var_len_addr,
 	CS_SMALLINT *var_ind_addr )
 {
 	CS_DATAFMT datafmt;
-	CS_RETCODE ret;
 
-	ret = blk_describe(blkdesc, colnum, &datafmt);
-	if (ret != CS_SUCCEED) {
-		fprintf(stderr, "blk_describe(%d) failed", colnum);
-		return ret;
-	}
+	check_call(blk_describe, (blkdesc, colnum, &datafmt));
 
 	datafmt.format = host_format;
 	datafmt.datatype = host_type;
 	datafmt.maxlength = host_maxlen;
 	datafmt.count = 1;
 
-	ret = blk_bind(blkdesc, colnum, &datafmt, var_addr, var_len_addr, var_ind_addr );
-	if (ret != CS_SUCCEED) {
-		fprintf(stderr, "blk_bind() failed\n");
-		return ret;
-	}
-	return ret;
+	check_call(blk_bind, (blkdesc, colnum, &datafmt, var_addr, var_len_addr, var_ind_addr ));
 }
 
 static const char table_name[] = "all_types_bcp_unittest";
@@ -239,7 +229,7 @@ TEST_MAIN()
 	if (verbose) {
 		printf("Trying login\n");
 	}
-	in = open_test_file();
+	in = open_test_file(argc > 1 ? argv[1] : NULL);
 	check_call(try_ctlogin, (&ctx, &conn, &cmd, verbose));
 
 	for (;;) {
@@ -268,6 +258,7 @@ single_test(CS_CONNECTION *conn, CS_COMMAND *cmd, FILE *in)
 	int count = 0;
 	int i;
 	part_t part;
+	CS_RETCODE ret;
 
 	sprintf(command, "if exists (select 1 from sysobjects where type = 'U' and name = '%s') drop table %s",
 		table_name, table_name);
@@ -275,8 +266,20 @@ single_test(CS_CONNECTION *conn, CS_COMMAND *cmd, FILE *in)
 	check_call(run_command, (cmd, command));
 
 	create_table_sql = read_part(in);
-	check_call(run_command, (cmd, create_table_sql));
+	ret = run_command(cmd, create_table_sql);
 	free(create_table_sql);
+
+	/* on error skip the test */
+	if (ret != CS_SUCCEED) {
+		part = read_part_type(in);
+		assert(part == PART_BIND);
+		free(read_part(in));
+
+		part = read_part_type(in);
+		assert(part == PART_OUTPUT);
+		free(read_part(in));
+		return;
+	}
 
 	sprintf(command, "delete from %s", table_name);
 	check_call(run_command, (cmd, command));
@@ -307,7 +310,7 @@ single_test(CS_CONNECTION *conn, CS_COMMAND *cmd, FILE *in)
 	out1 = read_part(in);
 	out2 = get_output(cmd);
 	if (strcmp(out1, out2) != 0) {
-		fprintf(stderr, "Wrong output\n--\n%s\n--\n%s\n--\n", out1, out2);
+		fprintf(stderr, "Wrong output\n-- expected --\n%s\n-- got --\n%s\n--\n", out1, out2);
 		exit(1);
 	}
 	free(out1);
@@ -412,20 +415,25 @@ get_output(CS_COMMAND *cmd)
 
 
 static FILE *
-open_test_file(void)
+open_test_file(const char *filename)
 {
-	FILE *input_file;
+	FILE *input_file = NULL;
 	char in_file[256];
 
-	snprintf(in_file, sizeof(in_file), "%s/blk_in.in", FREETDS_SRCDIR);
-
-	input_file = fopen(in_file, "r");
-	if (!input_file) {
-		strcpy(in_file, "blk_in.in");
-		input_file = fopen(in_file, "r");
+	/* If no filename requested, try blk_in.in in both the expected location and the current directory. */
+	if (filename)
+		input_file = fopen(filename, "r");
+	else {
+		snprintf(in_file, sizeof(in_file), "%s/blk_in.in", FREETDS_SRCDIR);
+		filename = in_file;
+		input_file = fopen(filename, "r");
+		if (!input_file) {
+			filename = "blk_in.in";
+			input_file = fopen(filename, "r");
+		}
 	}
 	if (!input_file) {
-		fprintf(stderr, "could not open %s\n", in_file);
+		fprintf(stderr, "could not open %s\n", filename);
 		exit(1);
 	}
 	return input_file;

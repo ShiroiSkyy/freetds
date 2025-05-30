@@ -174,7 +174,7 @@ typedef struct tdsdaterec
  * tell us the number of bytes required to store the specified
  * precision.
  */
-extern const int tds_numeric_bytes_per_prec[];
+extern const uint8_t tds_numeric_bytes_per_prec[];
 
 typedef int TDSRET;
 #define TDS_NO_MORE_RESULTS  ((TDSRET)1)
@@ -938,7 +938,8 @@ typedef struct tds_cursor
 	TDS_CURSOR_STATUS status;
 	TDS_USMALLINT srv_status;
 	TDSRESULTINFO *res_info;	/** row fetched from this cursor */
-	TDS_INT type, concurrency;
+	TDS_INT type;
+	TDS_INT concurrency;
 } TDSCURSOR;
 
 /**
@@ -1502,7 +1503,7 @@ DSTR* tds_dstr_get(TDSSOCKET * tds, DSTR * s, size_t len);
 /* util.c */
 int tdserror (const TDSCONTEXT * tds_ctx, TDSSOCKET * tds, int msgno, int errnum);
 TDS_STATE tds_set_state(TDSSOCKET * tds, TDS_STATE state);
-void tds_swap_bytes(void *buf, int bytes);
+void tds_swap_bytes(void *buf, size_t bytes);
 unsigned int tds_gettime_ms(void);
 
 
@@ -1686,6 +1687,7 @@ struct tds_bcpinfo
 	TDS_INT direction;
 	bool identity_insert_on;
 	bool xfer_init;
+	bool datarows_locking;
 	TDS_INT bind_count;
 	TDSRESULTINFO *bindinfo;
 	TDS5COLINFO *sybase_colinfo;

@@ -151,8 +151,20 @@ _ct_get_user_api_layer_error(int error)
 	case 6:
 		return "The parameter %1! cannot be NULL.";
 		break;
+	case 8:
+		return "The %1! parameter must be NULL.";
+		break;
+	case 9:
+		return "The %1! parameter must be set to CS_UNUSED.";
+		break;
 	case 15:
 		return "Use direction CS_BLK_IN or CS_BLK_OUT for a bulk copy operation.";
+		break;
+	case 18:
+		return "A cursor must be declared before this command type can be initialized.";
+		break;
+	case 29:
+		return "This type of command cannot be batched with the command already initialized on the command structure.";
 		break;
 	case 51:
 		return "Exactly one of context and connection must be non-NULL.";
@@ -178,6 +190,9 @@ _ct_get_user_api_layer_error(int error)
 		break;
 	case 155:
 		return "This routine cannot be called when the command structure is idle.";
+		break;
+	case 171:
+		return "A cursor must be opened before this command type can be initialized.";
 		break;
 	default:
 		break;
@@ -2035,6 +2050,7 @@ ct_cmd_drop(CS_COMMAND * cmd)
 			cmd->next = NULL;
 		}
 
+		tds_release_cursor(&cmd->cursor);
 		free(cmd);
 	}
 	return CS_SUCCEED;
@@ -2824,6 +2840,11 @@ ct_cmd_props(CS_COMMAND * cmd, CS_INT action, CS_INT property, CS_VOID * buffer,
 		case CS_CUR_ID:
 		case CS_CUR_NAME:
 		case CS_CUR_ROWCOUNT:
+
+			if (property == CS_CUR_STATUS && buflen != CS_UNUSED) {
+				_ctclient_msg(NULL, cmd->con, "ct_cmd_props(GET,CUR_STATUS)", 1, 1, 1, 9, "%s", "buflen");
+				return CS_FAIL;
+			}
 
 			cursor = cmd->cursor;
 
@@ -4000,11 +4021,35 @@ ct_poll(CS_CONTEXT * ctx, CS_CONNECTION * connection, CS_INT milliseconds, CS_CO
 	return CS_FAIL;
 }
 
+static CS_RETCODE
+_ct_cursor_no_name_text(CS_COMMAND * cmd, const char *funcname, CS_CHAR * name, CS_INT namelen, CS_CHAR * text, CS_INT tlen)
+{
+	if (name != NULL) {
+		_ctclient_msg(NULL, cmd->con, funcname, 1, 1, 1, 8, "%s", "name");
+		return CS_FAIL;
+	}
+	if (namelen != CS_UNUSED) {
+		_ctclient_msg(NULL, cmd->con, funcname, 1, 1, 1, 9, "%s", "namelen");
+		return CS_FAIL;
+	}
+	if (text != NULL) {
+		_ctclient_msg(NULL, cmd->con, funcname, 1, 1, 1, 8, "%s", "text");
+		return CS_FAIL;
+	}
+	if (tlen != CS_UNUSED) {
+		_ctclient_msg(NULL, cmd->con, funcname, 1, 1, 1, 9, "%s", "tlen");
+		return CS_FAIL;
+	}
+	return CS_SUCCEED;
+}
+
 CS_RETCODE
 ct_cursor(CS_COMMAND * cmd, CS_INT type, CS_CHAR * name, CS_INT namelen, CS_CHAR * text, CS_INT tlen, CS_INT option)
 {
 	TDSSOCKET *tds;
 	TDSCURSOR *cursor;
+	const char *funcname;
+	CS_RETCODE ret;
 
 	tdsdump_log(TDS_DBG_FUNC, "ct_cursor(%p, %d, %p, %d, %p, %d, %d)\n", cmd, type, name, namelen, text, tlen, option);
 
@@ -4019,14 +4064,15 @@ ct_cursor(CS_COMMAND * cmd, CS_INT type, CS_CHAR * name, CS_INT namelen, CS_CHAR
 	switch (type) {
 	case CS_CURSOR_DECLARE:
 
+		funcname = "ct_cursor(DECLARE)";
 		namelen = _ct_get_string_length(name, namelen);
 		if (namelen < 0) {
-			_ctclient_msg(NULL, cmd->con, "ct_cursor(DECLARE)", 1, 1, 1, 5, "%d, %s", namelen, "namelen");
+			_ctclient_msg(NULL, cmd->con, funcname, 1, 1, 1, 5, "%d, %s", namelen, "namelen");
 			return CS_FAIL;
 		}
 		tlen = _ct_get_string_length(text, tlen);
 		if (tlen < 0) {
-			_ctclient_msg(NULL, cmd->con, "ct_cursor(DECLARE)", 1, 1, 1, 5, "%d, %s", tlen, "tlen");
+			_ctclient_msg(NULL, cmd->con, funcname, 1, 1, 1, 5, "%d, %s", tlen, "tlen");
 			return CS_FAIL;
 		}
 		cursor = tds_alloc_cursor(tds, name, (CS_UINT) namelen, text, (CS_UINT) tlen);
@@ -4050,9 +4096,15 @@ ct_cursor(CS_COMMAND * cmd, CS_INT type, CS_CHAR * name, CS_INT namelen, CS_CHAR
 
 	case CS_CURSOR_ROWS:
 
+		funcname = "ct_cursor(ROWS)";
+
+		ret = _ct_cursor_no_name_text(cmd, funcname, name, namelen, text, tlen);
+		if (ret != CS_SUCCEED)
+			return ret;
+
 		cursor = cmd->cursor;
 		if (!cursor) {
-			tdsdump_log(TDS_DBG_FUNC, "ct_cursor() : cursor not present\n");
+			_ctclient_msg(NULL, cmd->con, funcname, 1, 1, 1, 18, "");
 			return CS_FAIL;
 		}
 
@@ -4073,9 +4125,15 @@ ct_cursor(CS_COMMAND * cmd, CS_INT type, CS_CHAR * name, CS_INT namelen, CS_CHAR
 
 	case CS_CURSOR_OPEN:
 
+		funcname = "ct_cursor(OPEN)";
+
+		ret = _ct_cursor_no_name_text(cmd, funcname, name, namelen, text, tlen);
+		if (ret != CS_SUCCEED)
+			return ret;
+
 		cursor = cmd->cursor;
 		if (!cursor) {
-			tdsdump_log(TDS_DBG_FUNC, "ct_cursor() : cursor not present\n");
+			_ctclient_msg(NULL, cmd->con, funcname, 1, 1, 1, 18, "");
 			return CS_FAIL;
 		}
 
@@ -4096,9 +4154,15 @@ ct_cursor(CS_COMMAND * cmd, CS_INT type, CS_CHAR * name, CS_INT namelen, CS_CHAR
 
 	case CS_CURSOR_CLOSE:
 
+		funcname = "ct_cursor(CLOSE)";
+
+		ret = _ct_cursor_no_name_text(cmd, funcname, name, namelen, text, tlen);
+		if (ret != CS_SUCCEED)
+			return ret;
+
 		cursor = cmd->cursor;
 		if (!cursor) {
-			tdsdump_log(TDS_DBG_FUNC, "ct_cursor() : cursor not present\n");
+			_ctclient_msg(NULL, cmd->con, funcname, 1, 1, 1, 171, "");
 			return CS_FAIL;
 		}
 
@@ -4114,9 +4178,15 @@ ct_cursor(CS_COMMAND * cmd, CS_INT type, CS_CHAR * name, CS_INT namelen, CS_CHAR
 
 	case CS_CURSOR_DEALLOC:
 
+		funcname = "ct_cursor(DEALLOC)";
+
+		ret = _ct_cursor_no_name_text(cmd, funcname, name, namelen, text, tlen);
+		if (ret != CS_SUCCEED)
+			return ret;
+
 		cursor = cmd->cursor;
 		if (!cursor) {
-			tdsdump_log(TDS_DBG_FUNC, "ct_cursor() : cursor not present\n");
+			_ctclient_msg(NULL, cmd->con, funcname, 1, 1, 1, 18, "");
 			return CS_FAIL;
 		}
 		cursor->status.dealloc   = TDS_CURSOR_STATE_REQUESTED;
