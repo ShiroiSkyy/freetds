@@ -70,6 +70,7 @@
 #include <freetds/tds.h>
 #include <freetds/utils/string.h>
 #include <freetds/replacements.h>
+#include <freetds/tls.h>
 
 /**
  * \ingroup libtds
@@ -92,7 +93,7 @@ typedef struct tds_gss_auth
 } TDSGSSAUTH;
 
 static TDSRET
-tds_gss_free(TDSCONNECTION * conn TDS_UNUSED, struct tds_authentication * tds_auth)
+tds_gss_free(TDSCONNECTION *conn TDS_UNUSED, TDSAUTHENTICATION *tds_auth)
 {
 	TDSGSSAUTH *auth = (TDSGSSAUTH *) tds_auth;
 	OM_uint32 min_stat;
@@ -114,15 +115,15 @@ tds_gss_free(TDSCONNECTION * conn TDS_UNUSED, struct tds_authentication * tds_au
 	return TDS_SUCCESS;
 }
 
-static TDSRET tds_gss_continue(TDSSOCKET * tds, struct tds_gss_auth *auth, gss_buffer_desc *token_ptr);
+static TDSRET tds_gss_continue(TDSSOCKET * tds, TDSGSSAUTH * auth, gss_buffer_desc * token_ptr);
 
 static TDSRET
-tds7_gss_handle_next(TDSSOCKET * tds, struct tds_authentication * auth, size_t len)
+tds7_gss_handle_next(TDSSOCKET *tds, TDSAUTHENTICATION *auth, size_t len)
 {
 	TDSRET res;
 	gss_buffer_desc recv_tok;
 
-	if (((struct tds_gss_auth *) auth)->last_stat != GSS_S_CONTINUE_NEEDED)
+	if (((TDSGSSAUTH *) auth)->last_stat != GSS_S_CONTINUE_NEEDED)
 		return TDS_FAIL;
 
 	if (auth->packet) {
@@ -141,7 +142,7 @@ tds7_gss_handle_next(TDSSOCKET * tds, struct tds_authentication * auth, size_t l
 		return TDS_FAIL;
 	tds_get_n(tds, recv_tok.value, len);
 
-	res = tds_gss_continue(tds, (struct tds_gss_auth *) auth, &recv_tok);
+	res = tds_gss_continue(tds, (TDSGSSAUTH *) auth, &recv_tok);
 	free(recv_tok.value);
 	TDS_PROPAGATE(res);
 
@@ -154,13 +155,13 @@ tds7_gss_handle_next(TDSSOCKET * tds, struct tds_authentication * auth, size_t l
 }
 
 static TDSRET
-tds5_gss_handle_next(TDSSOCKET * tds, struct tds_authentication * auth, size_t len TDS_UNUSED)
+tds5_gss_handle_next(TDSSOCKET *tds, TDSAUTHENTICATION *auth, size_t len TDS_UNUSED)
 {
 	gss_buffer_desc recv_tok;
 	TDSPARAMINFO *info;
 	TDSCOLUMN *col;
 
-	if (((struct tds_gss_auth *) auth)->last_stat != GSS_S_CONTINUE_NEEDED)
+	if (((TDSGSSAUTH *) auth)->last_stat != GSS_S_CONTINUE_NEEDED)
 		return TDS_FAIL;
 
 	if (auth->packet) {
@@ -202,7 +203,7 @@ tds5_gss_handle_next(TDSSOCKET * tds, struct tds_authentication * auth, size_t l
 	recv_tok.value = ((TDSBLOB*) col->column_data)->textvalue;
 	recv_tok.length = col->column_size;
 
-	TDS_PROPAGATE(tds_gss_continue(tds, (struct tds_gss_auth *) auth, &recv_tok));
+	TDS_PROPAGATE(tds_gss_continue(tds, (TDSGSSAUTH *) auth, &recv_tok));
 
 	tds->out_flag = TDS_NORMAL;
 	TDS_PROPAGATE(tds5_gss_send(tds));
@@ -243,16 +244,17 @@ tds_gss_get_auth(TDSSOCKET * tds)
 	static gss_OID_desc nt_principal = { 10, (void*) "\x2a\x86\x48\x86\xf7\x12\x01\x02\x02\x01" };
 #endif
 	const char *server_name;
+	const char *realm_separator, *realm;
 	/* Storage for getaddrinfo calls */
 	struct addrinfo *addrs = NULL;
 	int len = 0;
 
-	struct tds_gss_auth *auth;
+	TDSGSSAUTH *auth;
 
 	if (!tds->login)
 		return NULL;
 
-	auth = tds_new0(struct tds_gss_auth, 1);
+	auth = tds_new0(TDSGSSAUTH, 1);
 	if (!auth)
 		return NULL;
 
@@ -273,24 +275,26 @@ tds_gss_get_auth(TDSSOCKET * tds)
 			server_name = addrs->ai_canonname;
 	}
 
+	if (!tds_dstr_isempty(&tds->login->server_realm_name)) {
+		realm_separator = "@";
+		realm = tds_dstr_cstr(&tds->login->server_realm_name);
+	} else {
+		realm_separator = "";
+		realm = "";
+	}
 	if (!tds_dstr_isempty(&tds->login->server_spn)) {
 		auth->sname = strdup(tds_dstr_cstr(&tds->login->server_spn));
 	} else if (IS_TDS7_PLUS(tds->conn)) {
-		if (tds_dstr_isempty(&tds->login->server_realm_name)) {
-			len = asprintf(&auth->sname, "MSSQLSvc/%s:%d", server_name, tds->login->port);
+		if (!tds_dstr_isempty(&tds->login->instance_name)) {
+			len = asprintf(&auth->sname, "MSSQLSvc/%s:%s%s%s", server_name, tds_dstr_cstr(&tds->login->instance_name),
+				       realm_separator, realm);
 		} else {
-			len = asprintf(&auth->sname, "MSSQLSvc/%s:%d@%s", server_name, tds->login->port,
-				       tds_dstr_cstr(&tds->login->server_realm_name));
+			len = asprintf(&auth->sname, "MSSQLSvc/%s:%d%s%s", server_name, tds->login->port, realm_separator, realm);
 		}
 	} else {
 		/* TDS 5.0, Sybase */
 		server_name = tds_dstr_cstr(&tds->login->server_name);
-		if (tds_dstr_isempty(&tds->login->server_realm_name)) {
-			len = asprintf(&auth->sname, "%s", server_name);
-		} else {
-			len = asprintf(&auth->sname, "%s@%s", server_name,
-				       tds_dstr_cstr(&tds->login->server_realm_name));
-		}
+		len = asprintf(&auth->sname, "%s%s%s", server_name, realm_separator, realm);
 	}
 	if (addrs)
 		freeaddrinfo(addrs);
@@ -350,8 +354,44 @@ tds_error_message(OM_uint32 e)
 #define error_message tds_error_message
 #endif
 
+static gss_channel_bindings_t
+tds_gss_get_channel_binding(TDSSOCKET *tds)
+{
+	/* Get tls-unique from OpenSSL */
+	unsigned char tls_unique_buf[256];
+	size_t tls_unique_len;
+	gss_channel_bindings_t cb;
+
+	tls_unique_len = tds_ssl_get_cb(tds->conn, tls_unique_buf, sizeof(tls_unique_buf));
+	if (tls_unique_len == 0)
+		return GSS_C_NO_CHANNEL_BINDINGS;
+
+	cb = calloc(sizeof(struct gss_channel_bindings_struct) + 11 + tls_unique_len, sizeof(char));
+
+	if (!cb) {
+		tdsdump_log(TDS_DBG_NETWORK, "tds_gss_get_channel_binding: failed to allocate channel bindings\n");
+		return GSS_C_NO_CHANNEL_BINDINGS;
+	}
+
+	cb->initiator_addrtype = GSS_C_AF_UNSPEC;
+	cb->initiator_address.length = 0;
+	cb->acceptor_addrtype = GSS_C_AF_UNSPEC;
+	cb->acceptor_address.length = 0;
+	cb->application_data.value = (void *) (cb + 1);
+
+	cb->application_data.length = tls_unique_len + 11;
+
+	memcpy(cb->application_data.value, "tls-unique:", 11);
+	memcpy((char *) cb->application_data.value + 11, tls_unique_buf, tls_unique_len);
+
+	tdsdump_dump_buf(TDS_DBG_NETWORK, "gss_channel_bindings_struct", cb, sizeof(struct gss_channel_bindings_struct));
+	tdsdump_dump_buf(TDS_DBG_NETWORK,
+			 "gss_channel_bindings_struct.application_data", cb->application_data.value, cb->application_data.length);
+	return cb;
+}
+
 static TDSRET
-tds_gss_continue(TDSSOCKET * tds, struct tds_gss_auth *auth, gss_buffer_desc *token_ptr)
+tds_gss_continue(TDSSOCKET *tds, TDSGSSAUTH *auth, gss_buffer_desc *token_ptr)
 {
 	gss_buffer_desc send_tok;
 	OM_uint32 maj_stat, min_stat = 0;
@@ -359,6 +399,7 @@ tds_gss_continue(TDSSOCKET * tds, struct tds_gss_auth *auth, gss_buffer_desc *to
 	int gssapi_flags;
 	const char *msg = "???";
 	gss_OID pmech = GSS_C_NULL_OID;
+	gss_channel_bindings_t cb;
 
 	auth->last_stat = GSS_S_COMPLETE;
 
@@ -392,13 +433,13 @@ tds_gss_continue(TDSSOCKET * tds, struct tds_gss_auth *auth, gss_buffer_desc *to
 	if (tds->login->mutual_authentication || IS_TDS7_PLUS(tds->conn))
 		gssapi_flags |= GSS_C_MUTUAL_FLAG;
 
-	maj_stat = gss_init_sec_context(&min_stat, GSS_C_NO_CREDENTIAL, &auth->gss_context, auth->target_name, 
-					GSS_C_NULL_OID,
-					gssapi_flags,
-					0, NULL,	/* no channel bindings */
-					token_ptr, 
-					&pmech,	
-					&send_tok, &ret_flags, NULL);	/* ignore time_rec */
+	cb = tds_gss_get_channel_binding(tds);
+
+	maj_stat =
+		gss_init_sec_context(&min_stat, GSS_C_NO_CREDENTIAL, &auth->gss_context, auth->target_name, GSS_C_NULL_OID,
+				     gssapi_flags, 0, cb, token_ptr, &pmech, &send_tok, &ret_flags, NULL /* ignore time_rec */ );
+
+	free(cb);
 
 	tdsdump_log(TDS_DBG_NETWORK, "gss_init_sec_context: actual mechanism at %p\n", pmech);
 	if (pmech && pmech->elements) {

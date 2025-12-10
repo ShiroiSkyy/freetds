@@ -85,9 +85,11 @@ TESTS =	\
 	tvp$(EXEEXT) \
 	tokens$(EXEEXT) \
 	describeparam$(EXEEXT) \
+	reexec$(EXEEXT) \
+	oldpwd$(EXEEXT) \
 	$(NULL)
 
-check_PROGRAMS	=	$(TESTS) oldpwd$(EXEEXT)
+check_PROGRAMS	=	$(TESTS)
 
 t0001_SOURCES	=	t0001.c
 t0002_SOURCES	=	t0002.c
@@ -175,8 +177,6 @@ mars1_SOURCES = mars1.c
 array_error_SOURCES = array_error.c
 closestmt_SOURCES = closestmt.c
 oldpwd_SOURCES = oldpwd.c
-# this test cannot work using wide characters as use UTF-8 and single byte encoding
-oldpwd_CPPFLAGS	=	$(GLOBAL_CPPFLAGS)
 bcp_SOURCES = bcp.c
 all_types_SOURCES = all_types.c
 all_types_LDFLAGS = -static ../libtdsodbc.la ../../tds/unittests/libcommon.a -shared $(GLOBAL_LD_ADD)
@@ -191,6 +191,7 @@ tokens_SOURCES	= tokens.c
 tokens_LDADD = ../../utils/unittests/libtds_test_base.a \
 		libcommon.a $(ODBC_LDFLAGS) ../../replacements/libreplacements.la \
 		../../server/libtdssrv.la $(GLOBAL_LD_ADD)
+reexec_SOURCES = reexec.c
 
 noinst_LIBRARIES = libcommon.a
 libcommon_a_SOURCES = common.c common.h c2string.c parser.c parser.h \

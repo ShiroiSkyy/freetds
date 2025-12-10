@@ -1193,7 +1193,7 @@ tdsdbopen(LOGINREC * login, const char *server, int msdblib)
 
 	tds_dir_char *tdsdump = tds_dir_getenv(TDS_DIR("TDSDUMP"));
 	if (tdsdump && *tdsdump) {
-		tdsdump_open(tdsdump);
+		tdsdump_topen(tdsdump);
 		tdsdump_log(TDS_DBG_FUNC, "tdsdbopen(%p, %s, [%s])\n", login, server? server : "0x0", msdblib? "microsoft" : "sybase");
 	}
 
@@ -3825,9 +3825,10 @@ _get_printable_size(TDSCOLUMN * colinfo)
 	case SYBLONGBINARY:
 	case SYBVARBINARY:
 		return colinfo->column_size * 2u;
-	case SYBFLT8:
 	case SYBREAL:
-		return 11;	/* FIX ME -- we do not track precision */
+		return 14;	/* FIX ME -- we do not track precision */
+	case SYBFLT8:
+		return 24;	/* FIX ME -- we do not track precision */
 	case SYBMONEY4:
 		return 12;
 	case SYBMONEY:

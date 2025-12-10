@@ -24,12 +24,19 @@ $! from Perl's configure.com, largely the work of Peter Prymmer.
 $!
 $ SAY := "write sys$output"
 $!
-$ SEARCH/KEY=(POS:2,SIZE:8) SYS$DISK:[]Configure. "VERSION="/EXACT/OUTPUT=version.tmp
+$! Extract the version string from version.h
+$ SEARCH [.include.freetds]version.h "#define TDS_VERSION_NO"/EXACT/OUTPUT=version.tmp
 $ open/read version version.tmp
 $ read version versionline
 $ close version
 $ delete/noconfirm/nolog version.tmp;*
-$ versionstring = f$element(1, "=", f$edit(versionline, "COLLAPSE"))
+$ quote = """"
+$ vers1 = f$element(1, quote, versionline)
+$! Expect "FreeTDS v1.6.dev" etc. - want to put the 1.6.dev bit into config.h
+$ offset = f$locate("v", vers1)
+$ versionstring = f$extract(offset+1, 99, vers1)
+$ write sys$output "Version: ''versionstring'"
+$ if versionstring .EQS. "" THEN EXIT 44
 $ gosub check_crtl
 $!
 $! The system-supplied iconv() is fine, but unless the internationalization
@@ -62,32 +69,33 @@ $   SAY "Using replacement socketpair()"
 $ ENDIF
 $!
 $!
-$! Enable OpenSSL if we have it. Don't bother looking for pre-1.1.1 versions
+$! Detect OpenSSL version - Logical OPENSSL must be defined in order
+$! for headers to be found (#include <openssl/...> works by logical
+$! substitution).
 $!
-$ d_rsa_get0_key = "0"
-$ IF F$SEARCH("SSL3$INCLUDE:SSL.H") .NES. ""
+$ sslval = F$ELEMENT(0,"$",F$TRNLNM("OPENSSL"))
+$ IF sslval .NES. ""
 $ THEN
+$!  The version number; could be blank string if they are just using
+$!  SSL$ROOT without version number
+$   sslver = F$EXTRACT(3,F$LENGTH(sslval)-3,sslval)
 $   d_openssl = "1"
-$   d_rsa_get0_key = "1"
-$   SAY "Found OpenSSL 3.x and creating linker options file..."
+$   SAY "Found OpenSSL ''sslver' and creating linker options file..."
 $   OPEN/WRITE sslopt openssl.opt
-$   WRITE sslopt "SYS$SHARE:SSL3$LIBSSL_SHR32.EXE/SHARE"
-$   WRITE sslopt "SYS$SHARE:SSL3$LIBCRYPTO_SHR32.EXE/SHARE"
+$   IF F$TRNLNM("FREETDS_OPENSSL_STATIC") .NE. 0
+$   THEN
+$     SAY "OpenSSL static linking."
+$     WRITE sslopt "SSL''sslver'$LIB:SSL''sslver'$LIBSSL32.OLB/LIB"
+$     WRITE sslopt "SSL''sslver'$LIB:SSL''sslver'$LIBCRYPTO32.OLB/LIB"
+$   ELSE
+$     SAY "OpenSSL linking to shared image."
+$     WRITE sslopt "SYS$SHARE:SSL''sslver'$LIBSSL_SHR32.EXE/SHARE"
+$     WRITE sslopt "SYS$SHARE:SSL''sslver'$LIBCRYPTO_SHR32.EXE/SHARE"
+$   ENDIF
 $   CLOSE sslopt
 $ ELSE
-$   IF F$SEARCH("SSL111$INCLUDE:SSL.H") .NES. ""
-$   THEN
-$     d_openssl = "1"
-$     d_rsa_get0_key = "1"
-$     SAY "Found OpenSSL 1.1.x and creating linker options file..."
-$     OPEN/WRITE sslopt openssl.opt
-$     WRITE sslopt "SYS$SHARE:SSL111$LIBSSL_SHR32.EXE/SHARE"
-$     WRITE sslopt "SYS$SHARE:SSL111$LIBCRYPTO_SHR32.EXE/SHARE"
-$     CLOSE sslopt
-$   ELSE
-$     d_openssl = "0"
-$     SAY "Did not find OpenSSL"
-$   ENDIF
+$   d_openssl = "0"
+$   SAY "Did not find OpenSSL"
 $ ENDIF
 $!
 $! Generate config.h
@@ -117,8 +125,6 @@ $ write vmsconfigtmp "POSITION (BEGINNING_OF (main_buffer));"
 $ write vmsconfigtmp "eve_global_replace(""@D_OPENSSL@"",""''d_openssl'"");"
 $ write vmsconfigtmp "POSITION (BEGINNING_OF (main_buffer));"
 $ write vmsconfigtmp "eve_global_replace(""@D_STDINT@"",""''d_stdint'"");"
-$ write vmsconfigtmp "POSITION (BEGINNING_OF (main_buffer));"
-$ write vmsconfigtmp "eve_global_replace(""@D_RSA_GET0_KEY@"",""''d_rsa_get0_key'"");"
 $ write vmsconfigtmp "out_file := GET_INFO (COMMAND_LINE, ""output_file"");"
 $ write vmsconfigtmp "WRITE_FILE (main_buffer, out_file);"
 $ write vmsconfigtmp "quit;"
@@ -212,29 +218,10 @@ $ close vmsconfigtmp
 $ @vmsconfigtmp.com
 $ delete/noconfirm/nolog vmsconfigtmp.com;
 $!
-$! C99 requires t, z, and j modifiers to decimal format specifiers
-$! but the HP compiler doesn't handle them, so replace the one
-$! use of %td with %ld.
-$!
-$ open/write vmsbsqldbtmp vmsbsqldbtmp.com
-$ write vmsbsqldbtmp "$ define/user_mode/nolog SYS$OUTPUT _NLA0:"
-$ write vmsbsqldbtmp "$ edit/tpu/nodisplay/noinitialization -"
-$ write vmsbsqldbtmp "/section=sys$library:eve$section.tpu$section -"
-$ write vmsbsqldbtmp "/command=sys$input/output=[.src.apps]bsqldb.c [.src.apps]bsqldb.c"
-$ write vmsbsqldbtmp "input_file := GET_INFO (COMMAND_LINE, ""file_name"");"
-$ write vmsbsqldbtmp "main_buffer:= CREATE_BUFFER (""main"", input_file);"
-$ write vmsbsqldbtmp "POSITION (BEGINNING_OF (main_buffer));"
-$ write vmsbsqldbtmp "eve_global_replace("" %td "","" %ld "");"
-$ write vmsbsqldbtmp "out_file := GET_INFO (COMMAND_LINE, ""output_file"");"
-$ write vmsbsqldbtmp "WRITE_FILE (main_buffer, out_file);"
-$ write vmsbsqldbtmp "quit;"
-$ write vmsbsqldbtmp "$ exit"
-$ close vmsbsqldbtmp
-$ @vmsbsqldbtmp.com
-$ delete/noconfirm/nolog vmsbsqldbtmp.com;
-$!
 $ Say ""
-$ Say "Configuration complete; run MMK or MMS to build."
+$ Say "Configuration complete; run MMK to build."
+$ Say "Sample build command: mmk/MACRO=(""MSDBLIB""=1,""ODBC""=1,""ODBC_MARS""=1,""ODBC_WIDE""=1)"
+$ Say "  append 'check' to run tests"
 $ EXIT
 $!
 $ CHECK_CRTL:
@@ -252,7 +239,7 @@ $!
 $ OS
 $ WS "#include <stdio.h>"
 $ WS "#include <stdlib.h>"
-$ WS "int main()"
+$ WS "int main(void)"
 $ WS "{"
 $ WS "char *ptr;
 $ WS "asprintf(&ptr,""%d"",1);"
@@ -267,14 +254,23 @@ $!
 $! Check for vasprintf
 $!
 $ OS
-$ WS "#include <stdarg.h>"
 $ WS "#include <stdio.h>"
 $ WS "#include <stdlib.h>"
-$ WS "int main()"
+$ WS "#include <stdarg.h>"
+$ WS "void try_vasprintf(const char *fmt, ...)"
 $ WS "{"
-$ WS "char *ptr;
-$ WS "vasprintf(&ptr,""%d,%d"",1,2);"
-$ WS "exit(0);"
+$ WS "    char* dyn_buf;"
+$ WS "    va_list args;"
+$ WS "    va_start(args, fmt);"
+$ WS "    const int written = vasprintf(&dyn_buf, fmt, args);"
+$ WS "    va_end(args);"
+$ WS "    free(dyn_buf);"
+$ WS "    if (written == 18) exit(0);"
+$ WS "    exit(1);"
+$ WS "}"
+$ WS "int main(void)"
+$ WS "{"
+$ WS "    try_vasprintf(""Testing... %d, %d, %d"", 1, 2, 3);"
 $ WS "}"
 $ CS
 $ tmp = "vasprintf"
@@ -288,7 +284,7 @@ $!
 $ OS
 $ WS "#include <stdlib.h>"
 $ WS "#include <string.h>"
-$ WS "int main()"
+$ WS "int main(void)"
 $ WS "{"
 $ WS "char *word, *brkt, mystr[4];"
 $ WS "strcpy(mystr,""1^2"");"
@@ -307,10 +303,10 @@ $ OS
 $ WS "#include <stdarg.h>"
 $ WS "#include <stdio.h>"
 $ WS "#include <stdlib.h>"
-$ WS "int main()"
+$ WS "int main(void)"
 $ WS "{"
 $ WS "char ptr[15];"
-$ WS "snprintf((char*)&ptr,sizeof(ptr),""%d,%d"",1,2);"
+$ WS "snprintf(ptr,sizeof(ptr),""%d,%d"",1,2);"
 $ WS "exit(0);"
 $ WS "}"
 $ CS
@@ -324,7 +320,7 @@ $!
 $ OS
 $ WS "#include <stdlib.h>"
 $ WS "#include <stdint.h>"
-$ WS "int main()"
+$ WS "int main(void)"
 $ WS "{"
 $ WS "exit(0);"
 $ WS "}"

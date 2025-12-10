@@ -32,6 +32,8 @@ set(tests
 	utf8_4 qn connection_string_parse
 	tvp tokens
 	describeparam
+	reexec
+	oldpwd
 )
 
 if(WIN32)
@@ -44,7 +46,7 @@ add_library(o_common STATIC common.c common.h c2string.c parser.c parser.h
 	fake_thread.c fake_thread.h)
 
 set(static_tests all_types utf8_4 connection_string_parse)
-set(unicode_tests utf8 oldpwd)
+set(unicode_tests utf8)
 foreach(target ${tests})
 	add_executable(o_${target} EXCLUDE_FROM_ALL ${target}.c)
 	set_target_properties(o_${target} PROPERTIES OUTPUT_NAME ${target})
@@ -65,5 +67,5 @@ foreach(target ${tests})
 		set_property(TARGET o_${target} APPEND PROPERTY LINK_LIBRARIES tdssrv tds)
 	endif()
 	add_test(NAME o_${target} WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR} COMMAND o_${target})
-	add_dependencies(check o_${target})
+	add_dependencies(build_tests o_${target})
 endforeach(target)

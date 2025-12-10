@@ -3561,13 +3561,15 @@ odbc_SQLExecute(TDS_STMT * stmt)
 			if (TDS_SUCCEED(ret))
 				ret = tds_multiple_done(tds, &multiple);
 		}
-	} else if (stmt->num_param_rows <= 1 && IS_TDS71_PLUS(tds->conn) && (!stmt->dyn || stmt->need_reprepare)) {
-			if (stmt->dyn) {
-				if (odbc_free_dynamic(stmt) != SQL_SUCCESS)
-					ODBC_RETURN(stmt, SQL_ERROR);
-			}
-			stmt->need_reprepare = 0;
-			ret = tds71_submit_prepexec(tds, tds_dstr_cstr(&stmt->query), NULL, &stmt->dyn, stmt->params);
+	} else if (stmt->num_param_rows <= 1 && IS_TDS71_PLUS(tds->conn)
+		   && (!stmt->dyn || stmt->need_reprepare || !stmt->dyn->num_id)) {
+		if (stmt->dyn) {
+			tdsdump_log(TDS_DBG_INFO1, "Re-prepare dynamic statement (num_id was %d)\n", stmt->dyn->num_id);
+			if (odbc_free_dynamic(stmt) != SQL_SUCCESS)
+				ODBC_RETURN(stmt, SQL_ERROR);
+		}
+		stmt->need_reprepare = 0;
+		ret = tds71_submit_prepexec(tds, tds_dstr_cstr(&stmt->query), NULL, &stmt->dyn, stmt->params);
 	} else {
 		/* TODO cursor change way of calling */
 		/* SQLPrepare */
@@ -4549,7 +4551,8 @@ static SQLRETURN
 odbc_SQLGetStmtAttr(SQLHSTMT hstmt, SQLINTEGER Attribute, SQLPOINTER Value,
 		    SQLINTEGER BufferLength, SQLINTEGER * StringLength WIDE)
 {
-	void *src;
+	static const SQLUINTEGER zero_ui = 0;
+	const void *src;
 	SQLINTEGER size;
 
 	ODBC_ENTER_HSTMT;
@@ -4630,7 +4633,7 @@ odbc_SQLGetStmtAttr(SQLHSTMT hstmt, SQLINTEGER Attribute, SQLPOINTER Value,
 		break;
 	case SQL_ATTR_QUERY_TIMEOUT:
 		size = sizeof(stmt->attr.query_timeout);
-		src = &stmt->attr.query_timeout;
+		src = (stmt->attr.query_timeout != DEFAULT_QUERY_TIMEOUT) ? &stmt->attr.query_timeout : &zero_ui;
 		break;
 	case SQL_ATTR_RETRIEVE_DATA:
 		size = sizeof(stmt->attr.retrieve_data);
@@ -6560,7 +6563,7 @@ ODBC_FUNC(SQLSetConnectAttr, (P(SQLHDBC,hdbc), P(SQLINTEGER,Attribute), P(SQLPOI
 			odbc_errs_add(&dbc->errs, "HY090", NULL);
 			break;
 		}
-		if (!odbc_dstr_copy(dbc, &dbc->oldpwd, StringLength, (ODBC_CHAR *) ValuePtr))
+		if (!odbc_dstr_copy_oct(dbc, &dbc->oldpwd, StringLength, (ODBC_CHAR *) ValuePtr))
 			odbc_errs_add(&dbc->errs, "HY001", NULL);
 		else
 			dbc->use_oldpwd = 1;

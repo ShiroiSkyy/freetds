@@ -120,6 +120,9 @@ AC_ARG_ENABLE(libiconv,
 
 if test "$use_libiconv" = "yes" ; then
 	AM_ICONV
+	if test "$am_cv_func_iconv" != "yes"; then
+		AC_MSG_ERROR([iconv library not found])
+	fi
 else
 	AC_MSG_NOTICE(libiconv disabled)
 	AC_DEFINE_UNQUOTED(ICONV_CONST, const, [Define as const if the declaration of iconv() needs const.])
@@ -702,18 +705,28 @@ then
 	fi
 
 	if test "$odbc" = "true"; then
-		saved_LDFLAGS="$LDFLAGS"
+		odbcinst_LDFLAGS=
 		ODBCINST_LDFLAGS=
-		LDFLAGS="$LDFLAGS $ODBC_LDFLAGS"
+		for flag in $ODBC_LDFLAGS; do
+			case "$flag" in
+			-l*)
+				;;
+			*)
+				odbcinst_LDFLAGS="$odbcinst_LDFLAGS $flag"
+				;;
+			esac
+		done
+		saved_LDFLAGS="$LDFLAGS"
+		LDFLAGS="$LDFLAGS $odbcinst_LDFLAGS"
 		if test $tds_mingw = yes; then
 			ODBCINST_LDFLAGS="-lodbccp32"
 		elif test "$unixodbc" = "true"; then
 			if test -n "$ODBC_CONFIG"; then
 				CPPFLAGS="$CPPFLAGS `$ODBC_CONFIG --cflags`"
 			fi
-			AC_CHECK_LIB(odbcinst, SQLGetPrivateProfileString, [ODBCINST_LDFLAGS="$ODBC_LDFLAGS -lodbcinst"])
+			AC_CHECK_LIB(odbcinst, SQLGetPrivateProfileString, [ODBCINST_LDFLAGS="$odbcinst_LDFLAGS -lodbcinst"])
 		elif test "$iodbc" = "true"; then
-			AC_CHECK_LIB(iodbcinst, SQLGetPrivateProfileString, [ODBCINST_LDFLAGS="$ODBC_LDFLAGS -liodbcinst"])
+			AC_CHECK_LIB(iodbcinst, SQLGetPrivateProfileString, [ODBCINST_LDFLAGS="$odbcinst_LDFLAGS -liodbcinst"])
 		fi
 		if test "$ODBCINST_LDFLAGS" != ""; then
 			AC_DEFINE_UNQUOTED(HAVE_SQLGETPRIVATEPROFILESTRING, 1, [Define to 1 if you have the SQLGetPrivateProfileString function.])
@@ -822,7 +835,8 @@ if test "$with_gnutls" = "yes"; then
 		NETWORK_LIBS="$NETWORK_LIBS `libgnutls-config --libs`"]
 	)
 	ACX_PUSH_LIBS("$NETWORK_LIBS")
-	AC_CHECK_FUNCS([gnutls_certificate_set_verify_function gnutls_record_disable_padding gnutls_rnd gnutls_alpn_set_protocols])
+	AC_CHECK_FUNCS([gnutls_certificate_set_verify_function gnutls_record_disable_padding \
+		        gnutls_rnd gnutls_alpn_set_protocols gnutls_set_default_priority_append])
 	ACX_POP_LIBS
 	if test "$gnutls_backend" = "unknown"; then
 		gnutls_backend=gcrypt

@@ -32,7 +32,7 @@ struct odbc_buf{
 HENV odbc_env;
 HDBC odbc_conn;
 HSTMT odbc_stmt;
-int odbc_use_version3 = 0;
+bool odbc_use_version3 = false;
 void (*odbc_set_conn_attr)(void) = NULL;
 const char *odbc_conn_additional_params = NULL;
 
@@ -63,6 +63,7 @@ static const char *const search_driver[] = {
 	".libs/libtdsodbc.dylib",
 	".libs/libtdsodbc.dll",
 	"_libs/libtdsodbc.dll",
+	"_libs/libtdsodbc.exe",	/* VMS */
 	"debug/tdsodbc.dll",
 	"release/tdsodbc.dll",
 	"libtdsodbc.so",
@@ -93,7 +94,18 @@ odbc_read_login_info(void)
 	if (!PWD && !read_login_info_base(&common_pwd, "PWD"))
 		return 1;
 
-	/* find our driver */
+	/*
+	 * Some of the ODBC tests "go in the front door", i.e. call
+	 * SQLDriverConnect() which will look up an entry in ODBCINST.INI .
+	 * In "connect" and "timeout3" they look up the entry FreeTDS.
+	 * However your system ODBCINST.INI probably doesn't point to
+	 * the driver we just built and are trying to test.
+	 *
+	 * So here we are finding the ODBC driver we just built and saving it
+	 * into a custom field common_pwd.driver, and those tests have code to
+	 * build a dummy ODBCINST.INI with an entry called FreeTDS and using
+	 * common_pwd.driver sa the driver.
+	 */
 #ifndef _WIN32
 	if (!getcwd(path, sizeof(path)))
 #else
@@ -638,7 +650,10 @@ odbc_read_error(void)
 
 	memset(odbc_err, 0, sizeof(odbc_err));
 	memset(odbc_sqlstate, 0, sizeof(odbc_sqlstate));
-	CHKGetDiagRec(SQL_HANDLE_STMT, odbc_stmt, 1, state, NULL, err, sizeof(odbc_err), NULL, "SI");
+	if (odbc_stmt != SQL_NULL_HSTMT)
+		CHKGetDiagRec(SQL_HANDLE_STMT, odbc_stmt, 1, state, NULL, err, sizeof(odbc_err), NULL, "SI");
+	else
+		CHKGetDiagRec(SQL_HANDLE_DBC, odbc_conn, 1, state, NULL, err, sizeof(odbc_err), NULL, "SI");
 	strcpy(odbc_err, C(err));
 	strcpy(odbc_sqlstate, C(state));
 	ODBC_FREE();

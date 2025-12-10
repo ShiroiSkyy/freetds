@@ -560,18 +560,35 @@ tds_ssl_init(TDSSOCKET *tds, bool full)
 #endif
 	}
 
-	/* NOTE: these functions return int however they cannot fail */
+	/* use default priorities unless overridden by gnutls ciphers setting in freetds.conf file... */
+	if (!tds_dstr_isempty(&tds->login->gnutls_ciphers)) {
+		tdsdump_log(TDS_DBG_INFO1, "setting custom gnutls ciphers to:%s\n", tds_dstr_cstr(&tds->login->gnutls_ciphers));
+		gnutls_priority_set_direct(session, tds_dstr_cstr(&tds->login->gnutls_ciphers), NULL);
+	} else {
+		/* NOTE: these functions return int however they cannot fail */
 
-	/* use default priorities... */
-	gnutls_set_default_priority(session);
+		/* use default priorities... */
+		gnutls_set_default_priority(session);
 
-	/* ... but overwrite some */
-	if (tds->login && tds->login->enable_tls_v1)
-		ret = gnutls_priority_set_direct(session, "NORMAL:%COMPAT:-VERS-SSL3.0", NULL);
-	else
-		ret = gnutls_priority_set_direct(session, "NORMAL:%COMPAT:-VERS-SSL3.0:-VERS-TLS1.0", NULL);
-	if (ret != 0)
-		goto cleanup;
+#ifdef HAVE_GNUTLS_SET_DEFAULT_PRIORITY_APPEND
+		gnutls_session_enable_compatibility_mode(session);
+#define set_ciphers(session, ciphers) \
+	gnutls_set_default_priority_append(session, "" ciphers, NULL, 0)
+#else
+#define set_ciphers(session, ciphers) \
+	gnutls_priority_set_direct(session, "NORMAL:%COMPAT:" ciphers, NULL)
+#endif
+
+		/* ... but overwrite some */
+		if (tds->login && tds->login->enable_tls_v1)
+			ret = set_ciphers(session, "-VERS-SSL3.0:+VERS-TLS1.0:+VERS-TLS1.1");
+		else if (tds->login && tds->login->enable_tls_v1_1)
+			ret = set_ciphers(session, "-VERS-SSL3.0:-VERS-TLS1.0:+VERS-TLS1.1");
+		else
+			ret = set_ciphers(session, "-VERS-SSL3.0:-VERS-TLS1.0:-VERS-TLS1.1");
+		if (ret != 0)
+			goto cleanup;
+	}
 
 	/* mssql does not like padding too much */
 #ifdef HAVE_GNUTLS_RECORD_DISABLE_PADDING
@@ -649,6 +666,30 @@ tds_ssl_deinit(TDSCONNECTION *conn)
 		conn->tls_credentials = NULL;
 	}
 	conn->encrypt_single_packet = 0;
+}
+
+size_t
+tds_ssl_get_cb(TDSCONNECTION *conn, void *cb, size_t cblen)
+{
+	int rc;
+	gnutls_datum_t unique;
+
+	/* No CBT, skip channel binding */
+	if (!conn->tls_session)
+		return 0;
+
+	rc = gnutls_session_channel_binding((gnutls_session_t) conn->tls_session, GNUTLS_CB_TLS_UNIQUE, &unique);
+	if (rc) {
+		tdsdump_log(TDS_DBG_ERROR, "tds_ssl_get_cb: failed to get tls-unique: %s\n", gnutls_strerror(rc));
+		return 0;
+	}
+	if (unique.size > cblen) {
+		tdsdump_log(TDS_DBG_ERROR, "tds_ssl_get_cb: buffer overflow getting get tls-unique\n");
+		return 0;
+	}
+	memcpy(cb, unique.data, unique.size);
+	gnutls_free(unique.data);
+	return unique.size;
 }
 
 #else /* !HAVE_GNUTLS */
@@ -1008,7 +1049,8 @@ check_hostname(X509 *cert, const char *hostname)
 int
 tds_ssl_init(TDSSOCKET *tds, bool full)
 {
-#define DEFAULT_OPENSSL_CTX_OPTIONS (SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_TLSv1)
+#define DEFAULT_OPENSSL_CTX_OPTIONS \
+	(SSL_OP_NO_SSLv2 | SSL_OP_NO_SSLv3 | SSL_OP_NO_TLSv1 | SSL_OP_NO_TLSv1_1)
 #define DEFAULT_OPENSSL_CIPHERS "HIGH:!SSLv2:!aNULL:-DH"
 
 	SSL *con;
@@ -1036,6 +1078,8 @@ tds_ssl_init(TDSSOCKET *tds, bool full)
 
 	if (tds->login && tds->login->enable_tls_v1)
 		ctx_options &= ~SSL_OP_NO_TLSv1;
+	if (tds->login && tds->login->enable_tls_v1_1)
+		ctx_options &= ~SSL_OP_NO_TLSv1_1;
 	SSL_CTX_set_options(ctx, ctx_options);
 
 	if (!tds_dstr_isempty(&tds->login->cafile)) {
@@ -1182,6 +1226,32 @@ tds_ssl_deinit(TDSCONNECTION *conn)
 		conn->tls_ctx = NULL;
 	}
 	conn->encrypt_single_packet = 0;
+}
+
+size_t
+tds_ssl_get_cb(TDSCONNECTION *conn, void *cb, size_t cblen)
+{
+	SSL *ssl;
+	size_t tls_unique_len;
+
+	/* No CBT, skip channel binding */
+	if (!conn->tls_session)
+		return 0;
+
+	ssl = (SSL *) conn->tls_session;
+
+	/* Get tls-unique from OpenSSL */
+	tls_unique_len = SSL_get_finished(ssl, cb, cblen);
+	if (tls_unique_len == 0) {
+		/* Try peer finished as fallback */
+		tls_unique_len = SSL_get_peer_finished(ssl, cb, cblen);
+		if (tls_unique_len == 0) {
+			tdsdump_log(TDS_DBG_ERROR, "tds_ssl_get_cb: failed to get tls-unique from OpenSSL\n");
+			/* No tls-unique available, skip channel binding */
+			return 0;
+		}
+	}
+	return tls_unique_len;
 }
 #endif
 

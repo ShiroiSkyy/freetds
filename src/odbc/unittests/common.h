@@ -46,7 +46,7 @@
 extern HENV odbc_env;
 extern HDBC odbc_conn;
 extern HSTMT odbc_stmt;
-extern int odbc_use_version3;
+extern bool odbc_use_version3;
 extern void (*odbc_set_conn_attr)(void);
 extern const char *odbc_conn_additional_params;
 extern char odbc_err[512];
@@ -187,6 +187,11 @@ const char *odbc_db_version(void);
 unsigned int odbc_db_version_int(void);
 bool odbc_driver_is_freetds(void);
 int odbc_tds_version(void);
+#ifdef TDS_NO_DM
+enum { tds_no_dm = 1 };
+#else
+enum { tds_no_dm = 0 };
+#endif
 
 void odbc_mark_sockets_opened(void);
 TDS_SYS_SOCKET odbc_find_last_socket(void);
@@ -195,7 +200,7 @@ TDS_SYS_SOCKET odbc_find_last_socket(void);
  * Converts an ODBC result into a string.
  * There is no check on destination length, use a buffer big enough.
  */
-void odbc_c2string(char *out, SQLSMALLINT out_c_type, const void *in, size_t in_len);
+void odbc_c2string(char *out, SQLSMALLINT out_c_type, const void *in, SQLLEN in_len);
 
 SQLLEN odbc_to_sqlwchar(SQLWCHAR *dst, const char *src, SQLLEN n);
 SQLLEN odbc_from_sqlwchar(char *dst, const SQLWCHAR *src, SQLLEN n);
@@ -237,3 +242,6 @@ extern struct odbc_lookup_int odbc_sql_types[];
 
 void odbc_swap_stmts(SQLHSTMT *a, SQLHSTMT *b);
 #define SWAP_STMT(stmt) odbc_swap_stmts(&odbc_stmt, &stmt)
+#define ODBC_SWAP(type, a, b) do { \
+	type tmp = (a); (a) = (b); (b) = tmp; \
+} while(0)

@@ -591,6 +591,8 @@ bcp_control(DBPROCESS * dbproc, int field, DBINT value)
 int
 bcp_getbatchsize(DBPROCESS * dbproc)
 {
+	CHECK_CONN(-1);
+	CHECK_PARAMETER(dbproc->hostfileinfo, SYBEBCPI, -1);
 	return dbproc->hostfileinfo->batch;
 }
 
@@ -2270,7 +2272,7 @@ null_data:
 }
 
 /**
- * Function to read data from file. I this case is empty as data
+ * Function to read data from file. In this case is empty as data
  * are already on bcp_column_data
  */
 static TDSRET

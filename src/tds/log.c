@@ -128,7 +128,11 @@ tdsdump_isopen(void)
  * \return  true if the file was opened, false if it couldn't be opened.
  */
 int
+#ifdef _WIN32
+tdsdump_wopen(const tds_dir_char *filename)
+#else
 tdsdump_open(const tds_dir_char *filename)
+#endif
 {
 	int result;		/* really should be a boolean, not an int */
 
@@ -189,6 +193,22 @@ tdsdump_open(const tds_dir_char *filename)
 	}
 	return result;
 }				/* tdsdump_open()  */
+
+#ifdef _WIN32
+int
+tdsdump_open(const char *filename)
+{
+	int ret;
+	tds_dir_char *fn = tds_dir_from_cstr(filename);
+
+	if (!fn)
+		return 0;
+
+	ret = tdsdump_wopen(fn);
+	free(fn);
+	return ret;
+}
+#endif
 
 static FILE*
 tdsdump_append(void)
@@ -279,6 +299,12 @@ current_thread_is_excluded(void)
 	return false;
 }
 
+static inline bool
+ascii_isprint(int ch)
+{
+	return ch >= ' ' && ch < 127;
+}
+
 #undef tdsdump_dump_buf
 /**
  * Dump the contents of data into the log file in a human readable format.
@@ -363,7 +389,7 @@ tdsdump_dump_buf(const char* file, unsigned int level_line, const char *msg, con
 		for (j = i; j < length && (j - i) < BYTES_PER_LINE; j++) {
 			if (j - i == BYTES_PER_LINE / 2)
 				*p++ = ' ';
-			p += sprintf(p, "%c", (isprint(data[j])) ? data[j] : '.');
+			p += sprintf(p, "%c", (ascii_isprint(data[j])) ? data[j] : '.');
 		}
 		strcpy(p, "|\n");
 		fputs(line_buf, dumpfile);

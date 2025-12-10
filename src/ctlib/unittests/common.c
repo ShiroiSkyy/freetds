@@ -7,10 +7,6 @@
 #include <freetds/replacements.h>
 #include <freetds/macros.h>
 
-#ifdef TDS_STATIC_CAST
-#include "ctlib.h"
-#endif
-
 static const char *BASENAME = NULL;
 
 static const char *PWD = DEFAULT_PWD_PATH;
@@ -75,8 +71,8 @@ establish_login(int argc, char **argv)
 	}
 	read_login_info();
 
-	return (*common_pwd.user && *common_pwd.server && *common_pwd.database)
-	    ? CS_SUCCEED : CS_FAIL;
+	/* user is not necessary for MSSQL trusted logins */
+	return (*common_pwd.server && *common_pwd.database) ? CS_SUCCEED : CS_FAIL;
 }
 
 CS_RETCODE
@@ -114,9 +110,7 @@ continue_logging_in(CS_CONTEXT ** ctx, CS_CONNECTION ** conn, CS_COMMAND ** cmd,
 	CS_RETCODE ret;
 	char query[512+10];
 	CS_INT bulk_enabled = CS_TRUE;
-#ifdef TDS_STATIC_CAST
-	TDSCONTEXT *tds_ctx;
-#endif
+	CS_INT convfmt = CS_DATES_SHORT;
 
 	ret = cs_ctx_alloc(CS_VERSION_100, ctx);
 	if (ret != CS_SUCCEED) {
@@ -126,14 +120,13 @@ continue_logging_in(CS_CONTEXT ** ctx, CS_CONNECTION ** conn, CS_COMMAND ** cmd,
 		return ret;
 	}
 
-#ifdef TDS_STATIC_CAST
-	/* Force default date format, some tests rely on it */
-	tds_ctx = (TDSCONTEXT *) (*ctx)->tds_ctx;
-	if (tds_ctx && tds_ctx->locale && tds_ctx->locale->datetime_fmt) {
-		free(tds_ctx->locale->datetime_fmt);
-		tds_ctx->locale->datetime_fmt = strdup("%b %d %Y %I:%M%p");
+	ret = cs_dt_info(*ctx, CS_SET, NULL, CS_DT_CONVFMT, CS_UNUSED, &convfmt, sizeof(convfmt), NULL);
+	if (ret != CS_SUCCEED) {
+		if (verbose) {
+			fprintf(stderr, "Date format initialization failed\n");
+		}
+		return ret;
 	}
-#endif
 
 	ret = ct_init(*ctx, CS_VERSION_100);
 	if (ret != CS_SUCCEED) {
@@ -384,7 +377,9 @@ servermsg_cb(CS_CONTEXT * context TDS_UNUSED, CS_CONNECTION * connection TDS_UNU
 const char *
 res_type_str(CS_RETCODE ret)
 {
-	static char str[64];
+	static char str[4][32];
+	static uint8_t last_used;
+	uint8_t n;
 
 #define S(s) case s: return #s;
 	switch ((int) ret) {
@@ -399,8 +394,9 @@ res_type_str(CS_RETCODE ret)
 #undef S
 	}
 
-	sprintf(str, "?? (%d)", (int) ret);
-	return str;
+	n = (last_used++) & 3;
+	snprintf(str[n], sizeof(str[0]), "?? (%d)", (int) ret);
+	return str[n];
 }
 
 void

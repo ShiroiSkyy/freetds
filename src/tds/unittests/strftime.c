@@ -61,6 +61,15 @@ TEST_MAIN()
 	TEST(4, "%z%%", "1234%");
 	TEST(4, "%z%H", "123400");
 
+	/* %z extension, wrong decimal */
+	dr.decimicrosecond = 1234567890;
+	TEST(4, "%z", "4567");
+
+	/* %z extension with digits */
+	dr.decimicrosecond = 1234567;
+	TEST(6, "%3z", "123");
+	TEST(2, "%4zz", "1234z");
+
 	/* not terminated format, should not overflow */
 	TEST(3, "%", "%");
 

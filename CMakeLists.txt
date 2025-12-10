@@ -66,8 +66,14 @@ math(EXPR BUILD_NUMBER "${BUILD_NUMBER}")
 set(FREETDS_TOPDIR ${CMAKE_CURRENT_LIST_DIR})
 
 enable_testing()
-set(CMAKE_CTEST_COMMAND ctest)
-add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND})
+if(CMAKE_GENERATOR MATCHES "^Visual Studio")
+	add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND} -C $(Configuration))
+else()
+	add_custom_target(check COMMAND ${CMAKE_CTEST_COMMAND})
+endif()
+
+add_custom_target(build_tests)
+add_dependencies(check build_tests)
 
 # TODO depends on configure
 add_definitions(-D_REENTRANT -D_THREAD_SAFE)
@@ -157,14 +163,15 @@ if(OPENSSL_FOUND)
 	config_write("#define HAVE_OPENSSL 1\n\n")
 	include_directories(${OPENSSL_INCLUDE_DIR})
 	set(CMAKE_REQUIRED_LIBRARIES ${OPENSSL_LIBRARIES})
+	set(CMAKE_REQUIRED_INCLUDES ${OPENSSL_INCLUDE_DIR})
 	# This fixes an issue with OpenSSL compiled as static library
 	if(WIN32)
 		list(APPEND CMAKE_REQUIRED_LIBRARIES crypt32 ws2_32)
 	endif(WIN32)
 	check_function_exists_define(BIO_get_data)
-	check_function_exists_define(RSA_get0_key)
 	check_function_exists_define(ASN1_STRING_get0_data)
 	check_function_exists_define(SSL_set_alpn_protos)
+	set(CMAKE_REQUIRED_INCLUDES)
 	set(CMAKE_REQUIRED_LIBRARIES)
 endif(OPENSSL_FOUND)
 
@@ -197,7 +204,7 @@ add_header(HAVE_WCHAR_H wchar.h)
 add_header(HAVE_WINDOWS_H windows.h)
 add_header(HAVE_SQL_H sql.h)
 add_header(HAVE_SQLEXT_H sqlext.h)
-foreach(fn char double float int short long "long double" "long long" "SQLWCHAR" "void *" wchar_t __int64 __int128
+foreach(fn char double float int short long "long int" "long double" "long long" "SQLWCHAR" "void *" wchar_t __int64 __int128
 	  SQLLEN SQLROWOFFSET SQLROWSETSIZE SQLSETPOSIROW)
 	string(REGEX REPLACE "[/. ]" "_" var "${fn}")
 	string(REPLACE "*" "P" var "${var}")
@@ -212,8 +219,11 @@ foreach(fn char double float int short long "long double" "long long" "SQLWCHAR"
 	config_write("#define ${var} \\@${var}\\@\n\n")
 endforeach(fn)
 
-foreach(fn SQLLEN SQLROWOFFSET SQLROWSETSIZE SQLSETPOSIROW)
-	config_write("/* Define to 1 if you have type <${fn}>. */\n#cmakedefine HAVE_${fn} 1\n\n")
+foreach(fn "long long" SQLLEN SQLROWOFFSET SQLROWSETSIZE SQLSETPOSIROW)
+	string(REGEX REPLACE "[/. ]" "_" var "${fn}")
+	string(REPLACE "*" "P" var "${var}")
+	string(TOUPPER "${var}" var)
+	config_write("/* Define to 1 if you have type <${fn}>. */\n#cmakedefine HAVE_${var} 1\n\n")
 endforeach(fn)
 
 check_prototype_definition(SQLColAttribute
@@ -260,9 +270,9 @@ SELECT_TYPE(tds_sysdep_intptr_type ${SIZEOF_VOID_P} "short;int;long;__int64" "No
 
 # find functions
 set(CMAKE_REQUIRED_LIBRARIES ${CMAKE_THREAD_LIBS_INIT})
-set(FUNCS asprintf vasprintf strtok_r strtok_s readpassphrase
+set(FUNCS strtok_r strtok_s readpassphrase
 	strlcpy strlcat basename getopt strsep
-	vsnprintf _vsnprintf snprintf _snprintf _vscprintf gettimeofday
+	gettimeofday
 	nl_langinfo locale_charset setenv putenv
 	getuid getpwuid getpwuid_r fstat alarm fork
 	gethrtime localtime_r setitimer
@@ -282,8 +292,10 @@ endforeach(func)
 
 macro(CHECK_STDIO_FUNCTION_EXISTS FUNCTION)
 	string(TOUPPER "HAVE_${FUNCTION}" VARIABLE)
-	string(TOUPPER "CHECK_${FUNCTION}" CHECK)
-	if (NOT ${VARIABLE})
+	config_write("/* Define to 1 if you have function <${FUNCTION}>. */\n")
+	config_write("#cmakedefine ${VARIABLE} 1\n\n")
+	if (NOT DEFINED ${VARIABLE})
+		string(TOUPPER "CHECK_${FUNCTION}" CHECK)
 		set(MACRO_CHECK_FUNCTION_DEFINITIONS
 			"-D${CHECK}=1 ${CMAKE_REQUIRED_FLAGS}")
 		message(STATUS "Looking for ${FUNCTION}")
@@ -397,6 +409,7 @@ else(WIN32)
 			check_function_exists_define(gnutls_record_disable_padding)
 			check_function_exists_define(gnutls_rnd)
 			check_function_exists_define(gnutls_alpn_set_protocols)
+			check_function_exists_define(gnutls_set_default_priority_append)
 			set(CMAKE_REQUIRED_LIBRARIES)
 			pkg_check_modules(NETTLEDEP gnutls)
 			if (";${NETTLEDEP_STATIC_LIBRARIES};" MATCHES ";nettle;")
@@ -458,8 +471,10 @@ endif()
 if(WIN32)
 	set(lib_NETWORK ws2_32 crypt32)
 else(WIN32)
-	# TODO check libraries
-	set(lib_NETWORK gssapi_krb5)
+	if(ENABLE_KRB5)
+		# TODO check libraries
+		set(lib_NETWORK gssapi_krb5)
+	endif()
 endif(WIN32)
 
 if(OPENSSL_FOUND)

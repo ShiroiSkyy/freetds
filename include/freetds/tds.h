@@ -467,8 +467,12 @@ is_tds_type_valid(int type)
 #define TDS_STR_READONLY_INTENT "read-only intent"
 /* configurable cipher suite to send to openssl's SSL_set_cipher_list() function */
 #define TLS_STR_OPENSSL_CIPHERS "openssl ciphers"
+/* configurable cipher suite to send to gnutls's gnutls_priority_set_direct() function */
+#define TLS_STR_GNUTLS_CIPHERS "gnutls ciphers"
 /* enable old TLS v1, required for instance if you are using a really old Windows XP */
 #define TDS_STR_ENABLE_TLS_V1 "enable tls v1"
+/* enable old TLS v1.1 */
+#define TDS_STR_ENABLE_TLS_V1_1 "enable tls v1.1"
 
 
 /* TODO do a better check for alignment than this */
@@ -512,6 +516,7 @@ typedef struct tds_login
 	DSTR crlfile;			/**< certificate revocation file */
 	DSTR certificate_host_name;	/**< certificate hostname to check, if empty use server_host_name */
 	DSTR openssl_ciphers;
+	DSTR gnutls_ciphers;		/**< gnutls ciphers to use */
 	DSTR app_name;
 	DSTR user_name;	    	/**< account for login */
 	DSTR password;	    	/**< password of account login */
@@ -550,6 +555,8 @@ typedef struct tds_login
 	unsigned int readonly_intent:1;
 	unsigned int enable_tls_v1:1;
 	unsigned int enable_tls_v1_specified:1;
+	unsigned int enable_tls_v1_1:1;
+	unsigned int enable_tls_v1_1_specified:1;
 	unsigned int server_is_valid:1;
 } TDSLOGIN;
 
@@ -1077,6 +1084,7 @@ typedef struct tds_poll_wakeup
 struct tds_connection
 {
 	TDS_USMALLINT tds_version;
+	bool corked;
 	TDS_UINT product_version;	/**< version of product (Sybase/MS and full version) */
 	char *product_name;
 
@@ -1322,7 +1330,7 @@ void tds_srv_charset_changed(TDSCONNECTION * conn, const char *charset);
 void tds7_srv_charset_changed(TDSCONNECTION * conn, TDS_UCHAR collate[5]);
 int tds_iconv_alloc(TDSCONNECTION * conn);
 void tds_iconv_free(TDSCONNECTION * conn);
-TDSICONV *tds_iconv_from_collate(TDSCONNECTION * conn, TDS_UCHAR collate[5]);
+TDSICONV *tds_iconv_from_collate(TDSCONNECTION * conn, const TDS_UCHAR collate[5]);
 
 
 /* mem.c */
@@ -1516,7 +1524,14 @@ void tdsdump_off(TDSDUMP_OFF_ITEM *off_item);
 void tdsdump_on(TDSDUMP_OFF_ITEM *off_item);
 int tdsdump_isopen(void);
 #include <freetds/popvis.h>
-int tdsdump_open(const tds_dir_char *filename);
+/* This function is exported by DB-Library, do not change its ABI */
+int tdsdump_open(const char *filename);
+#ifdef _WIN32
+int tdsdump_wopen(const wchar_t *filename);
+#define tdsdump_topen tdsdump_wopen
+#else
+#define tdsdump_topen tdsdump_open
+#endif
 #include <freetds/pushvis.h>
 void tdsdump_close(void);
 void tdsdump_dump_buf(const char* file, unsigned int level_line, const char *msg, const void *buf, size_t length);
@@ -1550,13 +1565,14 @@ char *tds_prwsaerror(int erc);
 void tds_prwsaerror_free(char *s);
 ptrdiff_t tds_connection_read(TDSSOCKET * tds, unsigned char *buf, size_t buflen);
 ptrdiff_t tds_connection_write(TDSSOCKET *tds, const unsigned char *buf, size_t buflen, int final);
+void tds_connection_coalesce(TDSSOCKET *tds);
+void tds_connection_flush(TDSSOCKET *tds);
 #define TDSSELREAD  POLLIN
 #define TDSSELWRITE POLLOUT
 int tds_select(TDSSOCKET * tds, unsigned tds_sel, int timeout_seconds);
 void tds_connection_close(TDSCONNECTION *conn);
 ptrdiff_t tds_goodread(TDSSOCKET * tds, unsigned char *buf, size_t buflen);
 ptrdiff_t tds_goodwrite(TDSSOCKET * tds, const unsigned char *buffer, size_t buflen);
-void tds_socket_flush(TDS_SYS_SOCKET sock);
 int tds_socket_set_nonblocking(TDS_SYS_SOCKET sock);
 int tds_wakeup_init(TDSPOLLWAKEUP *wakeup);
 void tds_wakeup_close(TDSPOLLWAKEUP *wakeup);

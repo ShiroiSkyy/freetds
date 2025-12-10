@@ -571,7 +571,7 @@ tds_connect(TDSSOCKET * tds, TDSLOGIN * login, int *p_oserr)
 	if (login->dump_file != NULL && !tdsdump_isopen()) {
 		if (login->debug_flags)
 			tds_debug_flags = login->debug_flags;
-		tdsdump_open(login->dump_file);
+		tdsdump_topen(login->dump_file);
 	}
 
 	tds->login = login;
@@ -684,6 +684,11 @@ reroute:
 		db_selected = true;
 	} else {
 		tds->out_flag = TDS_LOGIN;
+
+		/* SAP ASE 15.0+ SSL mode encrypts entire connection (like stunnel) */
+		if (login->encryption_level == TDS_ENCRYPTION_STRICT)
+			TDS_PROPAGATE(tds_ssl_init(tds, true));
+
 		erc = tds_send_login(tds, login);
 		/*if (TDS_SUCCEED(erc))
 			tds_srv_charset_changed(tds->conn, "CP936");*/

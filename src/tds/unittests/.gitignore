@@ -31,3 +31,5 @@
 /log_elision
 /convert_bounds
 /tls
+/sec_negotiate
+/cbt

@@ -152,12 +152,12 @@ tds_read_config_info(TDSSOCKET * tds, TDSLOGIN * login, TDSLOCALE * locale)
 	s = tds_dir_getenv(TDS_DIR("TDSDUMPCONFIG"));
 	if (s) {
 		if (*s) {
-			opened = tdsdump_open(s);
+			opened = tdsdump_topen(s);
 		} else {
 			tds_dir_char path[TDS_VECTOR_SIZE(pid_config_logpath) + 22];
 			pid_t pid = getpid();
 			tds_dir_snprintf(path, TDS_VECTOR_SIZE(path), pid_config_logpath, (int) pid);
-			opened = tdsdump_open(path);
+			opened = tdsdump_topen(path);
 		}
 	}
 
@@ -256,6 +256,9 @@ tds_read_config_info(TDSSOCKET * tds, TDSLOGIN * login, TDSLOCALE * locale)
 #ifdef HAVE_OPENSSL
 		tdsdump_log(TDS_DBG_INFO1, "\t%20s = %s\n", "openssl_ciphers", tds_dstr_cstr(&connection->openssl_ciphers));
 #endif
+#ifdef HAVE_GNUTLS
+		tdsdump_log(TDS_DBG_INFO1, "\t%20s = %s\n", "gnutls_ciphers", tds_dstr_cstr(&connection->gnutls_ciphers));
+#endif
 
 		tdsdump_close();
 	}
@@ -266,7 +269,7 @@ tds_read_config_info(TDSSOCKET * tds, TDSLOGIN * login, TDSLOCALE * locale)
 	if (connection->dump_file != NULL && !tdsdump_isopen()) {
 		if (connection->debug_flags)
 			tds_debug_flags = connection->debug_flags;
-		tdsdump_open(connection->dump_file);
+		tdsdump_topen(connection->dump_file);
 	}
 
 	return connection;
@@ -634,10 +637,10 @@ tds_parse_conf_section(const char *option, const char *value, void *param)
 		if (*value != '\0' && *end == '\0' && flags > INT_MIN && flags < INT_MAX)
 		    login->debug_flags = (int) flags;
 	} else if (!strcmp(option, TDS_STR_TIMEOUT) || !strcmp(option, TDS_STR_QUERY_TIMEOUT)) {
-		if (atoi(value))
+		if (atoi(value) > 0)
 			login->query_timeout = atoi(value);
 	} else if (!strcmp(option, TDS_STR_CONNTIMEOUT)) {
-		if (atoi(value))
+		if (atoi(value) > 0)
 			login->connect_timeout = atoi(value);
 	} else if (!strcmp(option, TDS_STR_HOST)) {
 		char tmp[128];
@@ -654,13 +657,13 @@ tds_parse_conf_section(const char *option, const char *value, void *param)
 			tdsdump_log(TDS_DBG_INFO1, "IP addr is %s.\n", tds_addrinfo2str(addrs, tmp, sizeof(tmp)));
 
 	} else if (!strcmp(option, TDS_STR_PORT)) {
-		if (atoi(value))
+		if (atoi(value) > 0)
 			login->port = atoi(value);
 	} else if (!strcmp(option, TDS_STR_EMUL_LE)) {
 		/* obsolete, ignore */
 		tds_config_boolean(option, value, login);
 	} else if (!strcmp(option, TDS_STR_TEXTSZ)) {
-		if (atoi(value))
+		if (atoi(value) > 0)
 			login->text_size = atoi(value);
 	} else if (!strcmp(option, TDS_STR_CHARSET)) {
 		s = tds_dstr_copy(&login->server_charset, value);
@@ -707,9 +710,14 @@ tds_parse_conf_section(const char *option, const char *value, void *param)
 		tdsdump_log(TDS_DBG_FUNC, "Setting ReadOnly Intent to '%s'.\n", value);
 	} else if (!strcmp(option, TLS_STR_OPENSSL_CIPHERS)) {
 		s = tds_dstr_copy(&login->openssl_ciphers, value);
+	} else if (!strcmp(option, TLS_STR_GNUTLS_CIPHERS)) {
+		s = tds_dstr_copy(&login->gnutls_ciphers, value);
 	} else if (!strcmp(option, TDS_STR_ENABLE_TLS_V1)) {
 		parse_boolean(option, value, login->enable_tls_v1);
 		login->enable_tls_v1_specified = 1;
+	} else if (!strcmp(option, TDS_STR_ENABLE_TLS_V1_1)) {
+		parse_boolean(option, value, login->enable_tls_v1_1);
+		login->enable_tls_v1_1_specified = 1;
 	} else {
 		tdsdump_log(TDS_DBG_INFO1, "UNRECOGNIZED option '%s' ... ignoring.\n", option);
 	}
@@ -810,6 +818,9 @@ tds_config_login(TDSLOGIN * connection, TDSLOGIN * login)
 	if (res && !tds_dstr_isempty(&login->openssl_ciphers))
 		res = tds_dstr_dup(&connection->openssl_ciphers, &login->openssl_ciphers);
 
+	if (res && !tds_dstr_isempty(&login->gnutls_ciphers))
+		res = tds_dstr_dup(&connection->gnutls_ciphers, &login->gnutls_ciphers);
+
 	if (res && !tds_dstr_isempty(&login->server_spn))
 		res = tds_dstr_dup(&connection->server_spn, &login->server_spn);
 
@@ -829,6 +840,11 @@ tds_config_login(TDSLOGIN * connection, TDSLOGIN * login)
 	if (login->enable_tls_v1_specified) {
 		connection->enable_tls_v1_specified = login->enable_tls_v1_specified;
 		connection->enable_tls_v1 = login->enable_tls_v1;
+	}
+
+	if (login->enable_tls_v1_1_specified) {
+		connection->enable_tls_v1_1_specified = login->enable_tls_v1_1_specified;
+		connection->enable_tls_v1_1 = login->enable_tls_v1_1;
 	}
 
 	if (res)
@@ -1465,16 +1481,20 @@ tds_get_compiletime_settings(void)
 TDSRET
 tds8_adjust_login(TDSLOGIN *login)
 {
-	if (!IS_TDS80_PLUS(login) && login->encryption_level != TDS_ENCRYPTION_STRICT)
-		return TDS_SUCCESS;
+	/* TDS 8.0 requires TDS_ENCRYPTION_STRICT (entire-connection encryption) */
+	if (IS_TDS80_PLUS(login))
+		login->encryption_level = TDS_ENCRYPTION_STRICT;
 
-	login->tds_version = 0x800;
-	login->encryption_level = TDS_ENCRYPTION_STRICT;
+	if (login->encryption_level == TDS_ENCRYPTION_STRICT) {
+		/* TDS 5.0 (Sybase/SAP ASE) it is optional; but TDS 7.x does not allow it.
+		 * So, try 8.0 unless they specifically requested 5.0 */
+		if (!IS_TDS50(login) && !IS_TDS80_PLUS(login))
+			login->tds_version = 0x800;
 
-	/* we must have certificates */
-	if (tds_dstr_isempty(&login->cafile)) {
-		if (!tds_dstr_copy(&login->cafile, "system"))
-			return -TDSEMEM;
+		/* Validate server certificate signature to reduce risk of MITM attacks */
+		if (tds_dstr_isempty(&login->cafile))
+			if (!tds_dstr_copy(&login->cafile, "system"))
+				return -TDSEMEM;
 	}
 
 	return TDS_SUCCESS;
