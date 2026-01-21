@@ -245,12 +245,12 @@ static void
 tdsdump_start(FILE *file, const char *fname, int line)
 {
 	char buf[128], *pbuf;
-	int started = 0;
+	bool started = false;
 
 	/* write always time before log */
 	if (tds_debug_flags & TDS_DBGFLAG_TIME) {
 		fputs(tds_timestamp_str(buf, sizeof(buf) - 1), file);
-		started = 1;
+		started = true;
 	}
 
 	pbuf = buf;
@@ -258,7 +258,7 @@ tdsdump_start(FILE *file, const char *fname, int line)
 		if (started)
 			*pbuf++ = ' ';
 		pbuf += sprintf(pbuf, "%d", (int) getpid());
-		started = 1;
+		started = true;
 	}
 
 	if ((tds_debug_flags & TDS_DBGFLAG_SOURCE) && fname && line) {
@@ -273,7 +273,7 @@ tdsdump_start(FILE *file, const char *fname, int line)
 			pbuf += sprintf(pbuf, " (%s:%d)", fname, line);
 		else
 			pbuf += sprintf(pbuf, "%s:%d", fname, line);
-		started = 1;
+		started = true;
 	}
 	if (started)
 		*pbuf++ = ':';
@@ -372,10 +372,15 @@ tdsdump_dump_buf(const char* file, unsigned int level_line, const char *msg, con
 				*p++ = '-';
 			else
 				*p++ = ' ';
-			if (j + i >= length)
-				p += sprintf(p, "  ");
-			else
-				p += sprintf(p, "%02x", data[i + j]);
+			if (j + i >= length) {
+				*p++ = ' ';
+				*p++ = ' ';
+			} else {
+				const unsigned char c = data[i + j];
+
+				*p++ = tds_hex_digits[c >> 4];
+				*p++ = tds_hex_digits[c & 15];
+			}
 		}
 
 		/*
@@ -386,10 +391,10 @@ tdsdump_dump_buf(const char* file, unsigned int level_line, const char *msg, con
 		/*
 		 * print each byte in ascii
 		 */
-		for (j = i; j < length && (j - i) < BYTES_PER_LINE; j++) {
-			if (j - i == BYTES_PER_LINE / 2)
+		for (j = 0; j + i < length && j < BYTES_PER_LINE; j++) {
+			if (j == BYTES_PER_LINE / 2)
 				*p++ = ' ';
-			p += sprintf(p, "%c", (ascii_isprint(data[j])) ? data[j] : '.');
+			*p++ = ascii_isprint(data[j + i]) ? (char) data[j + i] : '.';
 		}
 		strcpy(p, "|\n");
 		fputs(line_buf, dumpfile);

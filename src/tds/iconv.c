@@ -50,7 +50,7 @@
 
 static int collate2charset(TDSCONNECTION * conn, const TDS_UCHAR collate[5]);
 static size_t skip_one_input_sequence(iconv_t cd, const TDS_ENCODING * charset, const char **input, size_t * input_size);
-static int tds_iconv_info_init(TDSICONV * char_conv, int client_canonic, int server_canonic);
+static bool tds_iconv_info_init(TDSICONV * char_conv, int client_canonic, int server_canonic);
 static bool tds_iconv_init(void);
 static void _iconv_close(iconv_t * cd);
 static void tds_iconv_info_close(TDSICONV * char_conv);
@@ -364,7 +364,7 @@ tds_iconv_open(TDSCONNECTION * conn, const char *charset, int use_utf16)
 	int canonic;
 	int canonic_charset = tds_canonical_charset(charset);
 	int canonic_env_charset = conn->env.charset ? tds_canonical_charset(conn->env.charset) : -1;
-	int fOK;
+	bool ok;
 
 	TDS_ENCODING *client = &conn->char_convs[client2ucs2]->from.charset;
 	TDS_ENCODING *server = &conn->char_convs[client2ucs2]->to.charset;
@@ -392,16 +392,16 @@ tds_iconv_open(TDSCONNECTION * conn, const char *charset, int use_utf16)
 
 	tdsdump_log(TDS_DBG_FUNC, "preparing iconv for \"%s\" <-> \"%s\" conversion\n", charset, UCS_2LE);
 
-	fOK = 0;
+	ok = false;
 	if (use_utf16) {
 		canonic = TDS_CHARSET_UTF_16LE;
-		fOK = tds_iconv_info_init(conn->char_convs[client2ucs2], canonic_charset, canonic);
+		ok = tds_iconv_info_init(conn->char_convs[client2ucs2], canonic_charset, canonic);
 	}
-	if (!fOK) {
+	if (!ok) {
 		canonic = TDS_CHARSET_UCS_2LE;
-		fOK = tds_iconv_info_init(conn->char_convs[client2ucs2], canonic_charset, canonic);
+		ok = tds_iconv_info_init(conn->char_convs[client2ucs2], canonic_charset, canonic);
 	}
-	if (!fOK)
+	if (!ok)
 		return TDS_FAIL;
 
 	/* 
@@ -421,8 +421,8 @@ tds_iconv_open(TDSCONNECTION * conn, const char *charset, int use_utf16)
 	conn->char_convs[client2server_chardata]->flags = TDS_ENCODING_MEMCPY;
 	if (canonic_env_charset >= 0) {
 		tdsdump_log(TDS_DBG_FUNC, "preparing iconv for \"%s\" <-> \"%s\" conversion\n", charset, conn->env.charset);
-		fOK = tds_iconv_info_init(conn->char_convs[client2server_chardata], canonic_charset, canonic_env_charset);
-		if (!fOK)
+		ok = tds_iconv_info_init(conn->char_convs[client2server_chardata], canonic_charset, canonic_env_charset);
+		if (!ok)
 			return TDS_FAIL;
 	} else {
 		conn->char_convs[client2server_chardata]->from.charset = canonic_charsets[canonic_charset];
@@ -446,7 +446,7 @@ tds_iconv_open(TDSCONNECTION * conn, const char *charset, int use_utf16)
  * \remarks The charset names written to \a iconv will be the canonical names, 
  *          not necessarily the names passed in. 
  */
-static int
+static bool
 tds_iconv_info_init(TDSICONV * char_conv, int client_canonical, int server_canonical)
 {
 	TDS_ENCODING *client = &char_conv->from.charset;
@@ -457,12 +457,12 @@ tds_iconv_info_init(TDSICONV * char_conv, int client_canonical, int server_canon
 
 	if (client_canonical < 0) {
 		tdsdump_log(TDS_DBG_FUNC, "tds_iconv_info_init: client charset name \"%d\" invalid\n", client_canonical);
-		return 0;
+		return false;
 	}
 
 	if (server_canonical < 0) {
 		tdsdump_log(TDS_DBG_FUNC, "tds_iconv_info_init: server charset name \"%d\" invalid\n", server_canonical);
-		return 0;
+		return false;
 	}
 
 	*client = canonic_charsets[client_canonical];
@@ -473,7 +473,7 @@ tds_iconv_info_init(TDSICONV * char_conv, int client_canonical, int server_canon
 		char_conv->to.cd = (iconv_t) -1;
 		char_conv->from.cd = (iconv_t) -1;
 		char_conv->flags = TDS_ENCODING_MEMCPY;
-		return 1;
+		return true;
 	}
 
 	char_conv->flags = 0;
@@ -507,7 +507,7 @@ tds_iconv_info_init(TDSICONV * char_conv, int client_canonical, int server_canon
 
 	/* tdsdump_log(TDS_DBG_FUNC, "tds_iconv_info_init: converting \"%s\"->\"%s\"\n", client->name, server->name); */
 
-	return 1;
+	return true;
 }
 
 
@@ -1045,6 +1045,12 @@ collate2charset(TDSCONNECTION * conn, const TDS_UCHAR collate[5])
 	case 43:		/* SQL_Latin1_General_Pref_CP850_CI_AS */
 	case 44:		/* SQL_Latin1_General_CP850_CI_AI */
 	case 49:		/* SQL_1xCompat_CP850_CI_AS */
+		return TDS_CHARSET_CP850;
+	case 51:		/* SQL_Latin1_General_Cp1_CS_AS_KI_WI */
+	case 52:		/* SQL_Latin1_General_Cp1_CI_AS_KI_WI */
+	case 53:		/* SQL_Latin1_General_Pref_Cp1_CI_AS_KI_WI */
+	case 54:		/* SQL_Latin1_General_Cp1_CI_AI_KI_WI */
+		return TDS_CHARSET_CP1252;
 	case 55:		/* SQL_AltDiction_CP850_CS_AS */
 	case 56:		/* SQL_AltDiction_Pref_CP850_CI_AS */
 	case 57:		/* SQL_AltDiction_CP850_CI_AI */
@@ -1056,10 +1062,28 @@ collate2charset(TDSCONNECTION * conn, const TDS_UCHAR collate[5])
 	case 80:		/* SQL_Latin1_General_1250_BIN */
 	case 81:		/* SQL_Latin1_General_CP1250_CS_AS */
 	case 82:		/* SQL_Latin1_General_CP1250_CI_AS */
+	case 83:		/* SQL_Czech_Cp1250_CS_AS_KI_WI */
+	case 84:		/* SQL_Czech_Cp1250_CI_AS_KI_WI */
+	case 85:		/* SQL_Hungarian_Cp1250_CS_AS_KI_WI */
+	case 86:		/* SQL_Hungarian_Cp1250_CI_AS_KI_WI */
+	case 87:		/* SQL_Polish_Cp1250_CS_AS_KI_WI */
+	case 88:		/* SQL_Polish_Cp1250_CI_AS_KI_WI */
+	case 89:		/* SQL_Romanian_Cp1250_CS_AS_KI_WI */
+	case 90:		/* SQL_Romanian_Cp1250_CI_AS_KI_WI */
+	case 91:		/* SQL_Croatian_Cp1250_CS_AS_KI_WI */
+	case 92:		/* SQL_Croatian_Cp1250_CI_AS_KI_WI */
+	case 93:		/* SQL_Slovak_Cp1250_CS_AS_KI_WI */
+	case 94:		/* SQL_Slovak_Cp1250_CI_AS_KI_WI */
+	case 95:		/* SQL_Slovenian_Cp1250_CS_AS_KI_WI */
+	case 96:		/* SQL_Slovenian_Cp1250_CI_AS_KI_WI */
 		return TDS_CHARSET_CP1250;
+	case 104:		/* SQL_Latin1_General_1251_BIN */
 	case 105:		/* SQL_Latin1_General_CP1251_CS_AS */
 	case 106:		/* SQL_Latin1_General_CP1251_CI_AS */
+	case 107:		/* SQL_Ukrainian_Cp1251_CS_AS_KI_WI */
+	case 108:		/* SQL_Ukrainian_Cp1251_CI_AS_KI_WI */
 		return TDS_CHARSET_CP1251;
+	case 112:		/* SQL_Latin1_General_1253_BIN */
 	case 113:		/* SQL_Latin1_General_CP1253_CS_AS */
 	case 114:		/* SQL_Latin1_General_CP1253_CI_AS */
 	case 120:		/* SQL_MixDiction_CP1253_CS_AS */
@@ -1067,15 +1091,33 @@ collate2charset(TDSCONNECTION * conn, const TDS_UCHAR collate[5])
 	case 122:		/* SQL_AltDiction2_CP1253_CS_AS */
 	case 124:		/* SQL_Latin1_General_CP1253_CI_AI */
 		return TDS_CHARSET_CP1253;
+	case 128:		/* SQL_Latin1_General_1254_BIN */
+	case 129:		/* SQL_Latin1_General_Cp1254_CS_AS_KI_WI */
+	case 130:		/* SQL_Latin1_General_Cp1254_CI_AS_KI_WI */
+		return TDS_CHARSET_CP1254;
+	case 136:		/* SQL_Latin1_General_1255_BIN */
 	case 137:		/* SQL_Latin1_General_CP1255_CS_AS */
 	case 138:		/* SQL_Latin1_General_CP1255_CI_AS */
 		return TDS_CHARSET_CP1255;
+	case 144:		/* SQL_Latin1_General_1256_BIN */
 	case 145:		/* SQL_Latin1_General_CP1256_CS_AS */
 	case 146:		/* SQL_Latin1_General_CP1256_CI_AS */
 		return TDS_CHARSET_CP1256;
+	case 152:		/* SQL_Latin1_General_1257_BIN */
 	case 153:		/* SQL_Latin1_General_CP1257_CS_AS */
 	case 154:		/* SQL_Latin1_General_CP1257_CI_AS */
+	case 155:		/* SQL_Estonian_Cp1257_CS_AS_KI_WI */
+	case 156:		/* SQL_Estonian_Cp1257_CI_AS_KI_WI */
+	case 157:		/* SQL_Latvian_Cp1257_CS_AS_KI_WI */
+	case 158:		/* SQL_Latvian_Cp1257_CI_AS_KI_WI */
+	case 159:		/* SQL_Lithuanian_Cp1257_CS_AS_KI_WI */
+	case 160:		/* SQL_Lithuanian_Cp1257_CI_AS_KI_WI */
 		return TDS_CHARSET_CP1257;
+	case 183:		/* SQL_Danish_Pref_CP1_CI_AS */
+	case 184:		/* SQL_SwedishPhone_Pref_CP1_CI_AS */
+	case 185:		/* SQL_SwedishStd_Pref_CP1_CI_AS */
+	case 186:		/* SQL_Icelandic_Pref_CP1_CI_AS */
+		return TDS_CHARSET_CP1252;
 	}
 
 	switch (lcid) {
@@ -1271,6 +1313,57 @@ tds_iconv_from_collate(TDSCONNECTION * conn, const TDS_UCHAR collate[5])
 		return conn->char_convs[client2server_chardata];
 
 	return tds_iconv_get_info(conn, conn->char_convs[client2ucs2]->from.charset.canonic, canonic_charset);
+}
+
+/**
+ * Returns a collation name for the given charset.
+ * It's used more to specify the encoding, the collation is usually case
+ * insensitive and accent sensitive.
+ */
+const char *
+tds_canonical_collate_name(int canonic_charset)
+{
+	/*
+	 * The name returned is chosen for maximum compatibility,
+	 * most are supported by MSSQL 2000.
+	 */
+	switch (canonic_charset) {
+	case TDS_CHARSET_CP437:
+		return "SQL_Latin1_General_CP437_CI_AS";
+	case TDS_CHARSET_CP850:
+		return "SQL_Latin1_General_CP850_CI_AS";
+	case TDS_CHARSET_CP874:
+		return "Thai_CI_AS";
+	case TDS_CHARSET_CP932:
+		return "Japanese_CI_AS";
+	case TDS_CHARSET_CP949:
+		return "Korean_Wansung_CI_AS";
+	case TDS_CHARSET_CP950:
+		return "Chinese_Taiwan_Bopomofo_CI_AS";
+	case TDS_CHARSET_CP1250:
+		return "SQL_Latin1_General_CP1250_CI_AS";
+	case TDS_CHARSET_CP1251:
+		return "SQL_Latin1_General_CP1251_CI_AS";
+	case TDS_CHARSET_CP1252:
+		break;
+	case TDS_CHARSET_CP1253:
+		return "SQL_Latin1_General_CP1253_CI_AS";
+	case TDS_CHARSET_CP1254:
+		return "SQL_Latin1_General_CP1254_CI_AS";
+	case TDS_CHARSET_CP1255:
+		return "SQL_Latin1_General_CP1255_CI_AS";
+	case TDS_CHARSET_CP1256:
+		return "SQL_Latin1_General_CP1256_CI_AS";
+	case TDS_CHARSET_CP1257:
+		return "SQL_Latin1_General_CP1257_CI_AS";
+	case TDS_CHARSET_CP1258:
+		return "Vietnamese_CI_AS";
+	case TDS_CHARSET_GB18030:
+		return "Chinese_PRC_CI_AS";
+	case TDS_CHARSET_UTF_8:
+		return "Chinese_PRC_90_CI_AS_SC_UTF8";
+	}
+	return "SQL_Latin1_General_CP1_CI_AS";
 }
 
 /** @} */

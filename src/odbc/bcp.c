@@ -359,6 +359,7 @@ odbc_bcp_bind(TDS_DBC *dbc, const void * varaddr, int prefixlen, int varlen,
 	 const void * terminator, int termlen, int vartype, int table_column)
 {
 	TDSCOLUMN *colinfo;
+	TDSICONV *conv;
 
 	tdsdump_log(TDS_DBG_FUNC, "bcp_bind(%p, %p, %d, %d -- %p, %d, %d, %d)\n",
 						dbc, varaddr, prefixlen, varlen,
@@ -407,6 +408,16 @@ odbc_bcp_bind(TDS_DBC *dbc, const void * varaddr, int prefixlen, int varlen,
 	colinfo->column_bindtype = vartype;
 	colinfo->column_bindlen  = varlen;
 	colinfo->bcp_prefix_len = prefixlen;
+
+	conv = colinfo->char_conv;
+	if (conv) {
+		TDSCONNECTION *conn = dbc->tds_socket->conn;
+		TDS_SERVER_TYPE desttype = tds_get_conversion_type(colinfo->on_server.column_type, colinfo->on_server.column_size);
+		TDS_SERVER_TYPE srctype = colinfo->column_bindtype == 0 ? desttype : (TDS_SERVER_TYPE) colinfo->column_bindtype;
+		int src_charset = is_unicode_type(srctype) ? odbc_get_wide_canonic(conn) : dbc->original_charset_num;
+
+		colinfo->char_conv = tds_iconv_get_info(conn, src_charset, conv->to.charset.canonic);
+	}
 
 	TDS_ZERO_FREE(colinfo->bcp_terminator);
 	colinfo->bcp_term_len = 0;
@@ -499,6 +510,9 @@ _tdsodbc_dbconvert(TDS_DBC *dbc, int srctype, const TDS_CHAR * src, SQLLEN src_l
 	case SYBBINARY:
 	case SYBVARBINARY:
 	case SYBIMAGE:
+	case XSYBBINARY:
+	case XSYBVARBINARY:
+	case SYBLONGBINARY:
 		ret = TDS_MIN(destlen, len);
 		memcpy(dest, dres.ib, ret);
 		free(dres.ib);
@@ -507,6 +521,12 @@ _tdsodbc_dbconvert(TDS_DBC *dbc, int srctype, const TDS_CHAR * src, SQLLEN src_l
 	case SYBINT2:
 	case SYBINT4:
 	case SYBINT8:
+	case SYBSINT1:
+	case SYBUINT1:
+	case SYBUINT2:
+	case SYBUINT4:
+	case SYBUINT8:
+	case SYB5INT8:
 	case SYBFLT8:
 	case SYBREAL:
 	case SYBBIT:
@@ -522,11 +542,19 @@ _tdsodbc_dbconvert(TDS_DBC *dbc, int srctype, const TDS_CHAR * src, SQLLEN src_l
 	case SYBMSTIME:
 	case SYBMSDATETIME2:
 	case SYBMSDATETIMEOFFSET:
+	case SYB5BIGDATETIME:
+	case SYB5BIGTIME:
+	case SYBTIME:
+	case SYBTIMEN:
+	case SYBDATE:
+	case SYBDATEN:
 		memcpy(dest, &dres, len);
 		ret = len;
 		break;
 	case SYBCHAR:
 	case SYBVARCHAR:
+	case XSYBCHAR:
+	case XSYBVARCHAR:
 	case SYBTEXT:
 		ret = (TDS_INT) _bcp_iconv_helper(dbc, bindcol, dres.c, len, (char *) dest, destlen);
 		free(dres.c);

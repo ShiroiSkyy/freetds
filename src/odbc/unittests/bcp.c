@@ -52,7 +52,9 @@ static const char *expected_special[] = {
 	"2015-03-14 15:26:53.589793",
 	"3.141593000",
 	"3.141593",		/* MS driver has "3141593" here. Bug? Should we be bug-compatible? */
+	"hello",
 	"",
+	"\xd3\xd4"
 };
 
 static int tds_version;
@@ -60,8 +62,8 @@ static int tds_version;
 static void
 cleanup(void)
 {
-	odbc_command("if exists (select 1 from sysobjects where type = 'U' and name = 'all_types_bcp_unittest') drop table all_types_bcp_unittest");
-	odbc_command("if exists (select 1 from sysobjects where type = 'U' and name = 'special_types_bcp_unittest') drop table special_types_bcp_unittest");
+	odbc_command("if object_id('all_types_bcp_unittest') is not null drop table all_types_bcp_unittest\n"
+		     "if object_id('special_types_bcp_unittest') is not null drop table special_types_bcp_unittest");
 }
 
 static void
@@ -132,7 +134,9 @@ init(void)
 		"dt2 datetime2(6) not null,"
 		"num decimal(19,9) not null,"
 		"numstr varchar(64) not null,"
+		"str nvarchar(6) not null,"
 		"empty varchar(64) not null,"
+		"cp varchar(64) collate SQL_Latin1_General_CP850_CI_AS not null,"
 		"bitnull bit null"
 		")");
 }
@@ -238,7 +242,7 @@ test_bind(int prefixlen)
 static void
 set_attr(void)
 {
-	SQLSetConnectAttr(odbc_conn, SQL_COPT_SS_BCP, (SQLPOINTER)SQL_BCP_ON, 0);
+	CHKSetConnectAttr(SQL_COPT_SS_BCP, (SQLPOINTER)SQL_BCP_ON, 0, "S");
 }
 
 static void
@@ -260,6 +264,7 @@ TEST_MAIN()
 	const char *s;
 
 	odbc_set_conn_attr = set_attr;
+	odbc_conn_additional_params = "ClientCharset=ISO-8859-1;";
 	odbc_connect();
 
 	tds_version = odbc_tds_version();
@@ -278,15 +283,11 @@ TEST_MAIN()
 	normal_select();
 
 	if ((s = getenv("BCP")) != NULL && 0 == strcmp(s, "nodrop")) {
-		printf("BCP=nodrop: '%s' kept\n", table_name);
+		printf("BCP=nodrop: tables kept\n");
 	} else {
-		printf("Dropping table %s\n", table_name);
-		odbc_command("drop table all_types_bcp_unittest");
-		if (tds_version >= 0x703)
-			odbc_command("drop table special_types_bcp_unittest");
+		printf("Dropping tables\n");
+		cleanup();
 	}
-
-	cleanup();
 
 	odbc_disconnect();
 
@@ -338,6 +339,7 @@ special_inserts(void)
 	SQL_TIMESTAMP_STRUCT timestamp;
 	DBDATETIME datetime;
 	SQL_NUMERIC_STRUCT numeric;
+	SQLWCHAR hello[6], oo[3];
 
 	printf("sending special types\n");
 	rows_sent = 0;
@@ -357,7 +359,7 @@ special_inserts(void)
 	timestamp.hour = 15;
 	timestamp.minute = 26;
 	timestamp.second = 53;
-	timestamp.fraction = 589793238;
+	timestamp.fraction = 589793000;
 	memset(&numeric, 0, sizeof(numeric));
 	numeric.precision = 19;
 	numeric.scale = 6;
@@ -365,12 +367,16 @@ special_inserts(void)
 	numeric.val[0] = 0xd9;
 	numeric.val[1] = 0xef;
 	numeric.val[2] = 0x2f;
+	odbc_to_sqlwchar(hello, "hello", 6);
+	odbc_to_sqlwchar(oo, "\xd3\xd4", 3);
 	bcp_bind(odbc_conn, (unsigned char *) &datetime, 0, sizeof(datetime), NULL, 0, BCP_TYPE_SQLDATETIME, 1);
 	bcp_bind(odbc_conn, (unsigned char *) &timestamp, 0, sizeof(timestamp), NULL, 0, BCP_TYPE_SQLDATETIME2, 2);
 	bcp_bind(odbc_conn, (unsigned char *) &numeric, 0, sizeof(numeric), NULL, 0, BCP_TYPE_SQLDECIMAL, 3);
 	bcp_bind(odbc_conn, (unsigned char *) &numeric, 0, sizeof(numeric), NULL, 0, BCP_TYPE_SQLDECIMAL, 4);
-	bcp_bind(odbc_conn, (unsigned char *) "", 0, 0, NULL, 0, BCP_TYPE_SQLVARCHAR, 5);
-	bcp_bind(odbc_conn, (unsigned char *) &not_null_bit, 0, SQL_NULL_DATA, NULL, 0, BCP_TYPE_SQLINT4, 6);
+	bcp_bind(odbc_conn, (unsigned char *) hello, 0, 10, NULL, 0, BCP_TYPE_SQLNVARCHAR, 5);
+	bcp_bind(odbc_conn, (unsigned char *) "", 0, 0, NULL, 0, BCP_TYPE_SQLVARCHAR, 6);
+	bcp_bind(odbc_conn, (unsigned char *) oo, 0, 4, NULL, 0, BCP_TYPE_SQLNVARCHAR, 7);
+	bcp_bind(odbc_conn, (unsigned char *) &not_null_bit, 0, SQL_NULL_DATA, NULL, 0, BCP_TYPE_SQLINT4, 8);
 
 	if (bcp_sendrow(odbc_conn) == FAIL)
 		report_bcp_error("bcp_sendrow", __LINE__, __FILE__);

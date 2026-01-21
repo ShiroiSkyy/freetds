@@ -132,6 +132,7 @@ tds_alloc_column(void)
 	tds_dstr_init(&col->column_name);
 	tds_dstr_init(&col->table_column_name);
 	col->funcs = &tds_invalid_funcs;
+	col->use_iconv_out = 1;
 
       Cleanup:
 	return col;
@@ -1147,7 +1148,7 @@ tds_init_connection(TDSCONNECTION *conn, TDSCONTEXT *context, unsigned int bufsi
 {
 	conn->env.block_size = bufsize;
 	conn->s = INVALID_SOCKET;
-	conn->use_iconv = 1;
+	conn->use_iconv_in = 1;
 	conn->tds_ctx = context;
 	conn->ncharsize = 1;
 	conn->unicharsize = 1;
