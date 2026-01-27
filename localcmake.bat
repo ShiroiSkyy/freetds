@@ -32,7 +32,8 @@ exit
 
 cd build
 echo "CMake 配置 FreeTDS"
-cmake -G "NMake Makefiles" -DCMAKE_BUILD_TYPE=Release -DENABLE_MSDBLIB=OFF -DENABLE_ODBC_WIDE=OFF -DBUILD_SHARED_LIBS=OFF -DWITH_OPENSSL=OFF -DCMAKE_INSTALL_PREFIX="E:\Github-Repositories\freetds\freetds_install" ..
+cmake -G "NMake Makefiles" -DCMAKE_BUILD_TYPE=Release -DENABLE_MSDBLIB=OFF -DENABLE_ODBC_WIDE=ON -DBUILD_SHARED_LIBS=OFF -DWITH_OPENSSL=OFF -DCMAKE_INSTALL_PREFIX="E:\Github-Repositories\freetds\freetds_install" ..
+@REM cmake -G "NMake Makefiles" -DCMAKE_BUILD_TYPE=Release -DENABLE_MSDBLIB=OFF -DENABLE_ODBC_WIDE=OFF -DBUILD_SHARED_LIBS=OFF -DWITH_OPENSSL=OFF -DCMAKE_INSTALL_PREFIX="E:\Github-Repositories\freetds\freetds_install" ..
 
 wsl
 grep -E "HAVE_ICONV|ICONV_CONST" ./include/config.h

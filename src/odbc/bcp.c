@@ -414,13 +414,13 @@ odbc_bcp_bind(TDS_DBC *dbc, const void * varaddr, int prefixlen, int varlen,
 		TDSCONNECTION *conn = dbc->tds_socket->conn;
 		TDS_SERVER_TYPE desttype = tds_get_conversion_type(colinfo->on_server.column_type, colinfo->on_server.column_size);
 		TDS_SERVER_TYPE srctype = colinfo->column_bindtype == 0 ? desttype : (TDS_SERVER_TYPE) colinfo->column_bindtype;
-		int src_charset;
-		#ifdef ENABLE_ODBC_WIDE
-			src_charset = is_unicode_type(srctype) ? odbc_get_wide_canonic(conn) : dbc->original_charset_num;
-		#else
-			src_charset = conn->charset->canonic;
-		#endif
 
+    int src_charset;
+#ifdef ENABLE_ODBC_WIDE
+	src_charset = is_unicode_type(srctype) ? odbc_get_wide_canonic(conn) : dbc->original_charset_num;
+#else
+    src_charset = conv->from.charset.canonic;
+#endif
 		colinfo->char_conv = tds_iconv_get_info(conn, src_charset, conv->to.charset.canonic);
 	}
 
