@@ -1510,4 +1510,3 @@ tds71_do_login(TDSSOCKET * tds, TDSLOGIN* login)
 
 	return ret;
 }
-
